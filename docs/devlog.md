@@ -68,3 +68,36 @@ Second test:
 * Continue recording for as long as motion is detected.
 * Add an inactivity timeout so recording stops only after motion has ended.
 * Evaluate memory usage, frame rate, resolution, and compression options for the 10-second pre-event buffer.
+
+## 2026-06-11
+### OpenMV Project Structure and Deployment
+
+- Continued restructuring the OpenMV firmware code into a more maintainable project layout.
+- Created a dedicated `firmware` folder for OpenMV N6 code.
+- Added a `src` folder for separating classes and reusable modules from `main.py`.
+- Started moving camera recording logic toward a class-based structure.
+
+### MJPEG Recording Investigation
+
+- Tested OpenMV MJPEG video recording.
+- Confirmed that MJPEG files can be recorded to the microSD card.
+- Verified that recorded MJPEG files can be opened with VLC.
+- Observed that VLC may show an index warning, but the video still plays correctly.
+
+### File System and Deployment Findings
+
+- Confirmed that OpenMV N6 does not automatically import modules from the PC-side GitHub repository.
+- Learned that required Python modules must also exist on the OpenMV device filesystem.
+- Identified that `firmware/src` must be copied to the OpenMV drive for imports such as `from src.Camera import Camera` to work.
+
+### Deployment Automation
+
+- Created a Windows `deploy.bat` script to automate copying firmware files to the OpenMV drive.
+- The deployment script copies `firmware/main.py` to the OpenMV root.
+- The deployment script copies the full `firmware/src` folder to the OpenMV filesystem.
+- This removes the need to manually copy files after each code change.
+
+### Next Steps
+
+- Continue implementing motion-triggered MJPEG recording.
+- Build the first version where motion detection starts video recording.
