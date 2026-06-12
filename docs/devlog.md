@@ -169,3 +169,20 @@ Second test:
 - Tested Camera class functionality using the recovered microSD card.
 - Confirmed that MJPEG recordings can be created successfully on the restored card.
 - Verified end-to-end operation of the recording pipeline after storage recovery.
+
+## 2026-06-12
+### Motion Detection Implementation
+
+- Migrated motion detection logic from the legacy sensor API to the CSI camera API.
+- Replaced legacy frame buffer allocation approach with CSI-compatible image storage.
+- Implemented frame differencing using a background image stored in RAM.
+- Added automatic background image initialization during Camera startup.
+- Verified histogram-based motion detection logic using CSI camera frames.
+- Confirmed successful motion detection operation on the OpenMV N6.
+
+### Next Steps
+
+- Implement a 10-second circular RAM buffer for video frames.
+- Store pre-motion frames in memory before motion is detected.
+- Begin automatic recording when motion is detected while preserving the buffered footage.
+- Continue development and testing on Monday.
