@@ -145,3 +145,12 @@ Second test:
 - Create a rolling RAM buffer for approximately 10 seconds of pre-event footage.
 - Trigger MJPEG recording automatically when motion is detected.
 - Save buffered frames preceding the motion event before continuing live recording.
+
+## 2026-06-12
+### CSI Camera Migration
+
+- Migrated the Camera class from the legacy `sensor` API to the newer CSI camera interface.
+- Replaced sensor-based camera initialization with a dedicated `csi.CSI()` instance.
+- Updated camera configuration and image capture calls to use CSI methods.
+- Verified that MJPEG video recording continues to function correctly after the migration.
+- Confirmed successful video creation on the microSD card using the CSI backend.

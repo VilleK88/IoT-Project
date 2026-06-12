@@ -1,16 +1,15 @@
 import mjpeg
-import sensor
-import time
+import csi
 import machine
 import os
 
 
 class Camera:
     def __init__(self):
-        sensor.reset()
-        sensor.set_pixformat(sensor.RGB565)
-        sensor.set_framesize(sensor.QVGA)
-        #sensor.skip_frames(time=2000)
+        self.csi0 = csi.CSI()
+        self.csi0.reset()
+        self.csi0.pixformat(csi.RGB565)
+        self.csi0.framesize(csi.QVGA)
         print("camera created")
 
         self.led = machine.LED("LED_RED")
@@ -34,7 +33,7 @@ class Camera:
         video = mjpeg.Mjpeg(filename)
         self.led.on()
         for i in range(200):
-            video.write(sensor.snapshot())
+            video.write(self.csi0.snapshot())
         video.close()
         self.video_count += 1
         self.led.off()
