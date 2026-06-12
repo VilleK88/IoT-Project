@@ -101,3 +101,47 @@ Second test:
 
 - Continue implementing motion-triggered MJPEG recording.
 - Build the first version where motion detection starts video recording.
+
+## 2026-06-12
+### SD Card Debugging
+
+- Investigated repeated failures when saving MJPEG recordings to the microSD card.
+- Added filesystem diagnostics to verify available storage devices and mount points.
+- Confirmed that OpenMV only exposed `rom` and `flash` when the original microSD card was inserted.
+- Observed repeated `OSError: [Errno 19] ENODEV` errors when attempting to access `/sdcard`.
+- Verified that the issue was unrelated to the Camera class refactor, deployment workflow, or import structure.
+
+### Internal Flash Recovery
+
+- Used the OpenMV IDE "Erase Internal FAT File System" tool.
+- Restored normal startup behavior, including the expected blue LED boot indication.
+- Confirmed that the internal flash filesystem remained accessible after recovery.
+
+### SD Card Investigation
+
+- Tested a second microSD card.
+- Confirmed that OpenMV correctly detected the replacement card.
+- Verified that `/sdcard` became available and accessible through MicroPython.
+- Determined that the original microSD card is likely corrupted, incompatible, or otherwise unreadable by the OpenMV firmware.
+
+### Camera Class Refactor
+
+- Continued moving camera functionality from `main.py` into a dedicated `Camera` class.
+- Encapsulated MJPEG video recording functionality inside `Camera.record_video()`.
+- Added automatic creation of the `motion_capture` directory on the microSD card.
+- Added logic to determine the next available video number by scanning existing recordings.
+- Implemented persistent video numbering across device restarts.
+
+### MJPEG Recording Validation
+
+- Successfully recorded MJPEG video files using the refactored Camera class.
+- Verified that recordings are written to `/sdcard/motion_capture`.
+- Added recording path diagnostics to simplify future debugging.
+- Confirmed successful end-to-end recording workflow using the replacement microSD card.
+
+### Next Steps
+
+- Implement frame differencing based motion detection.
+- Create a rolling RAM buffer for approximately 10 seconds of pre-event footage.
+- Trigger MJPEG recording automatically when motion is detected.
+- Save buffered frames preceding the motion event before continuing live recording.
