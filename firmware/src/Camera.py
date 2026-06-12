@@ -26,6 +26,22 @@ class Camera:
 
         self.video_count = self.get_next_video_num()
 
+        """self.trigger_threshold = 5
+        self.bg_update_frames = 50
+        self.update_blend = 128
+
+        self.extra_fb = self.csi0.alloc_extra_fb(self.csi0.width(), self.csi0.height(), self.csi0.RGB565)
+        print("About to save background image...")
+        self.csi0.extra_fb.replace(self.csi0.snapshot())
+        print("Saved background image")
+        self.triggered = False
+        self.frame_count = 0"""
+
+    def take_picture(self):
+        img = self.csi0.snapshot()
+        filename = "%s/pic_%05d.jpg" % (self.save_folder, self.video_count)
+        img.save(filename)
+
     def record_video(self):
         print("start recording")
         filename = "%s/video_%05d.mjpeg" % (self.save_folder, self.video_count)

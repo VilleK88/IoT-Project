@@ -154,3 +154,18 @@ Second test:
 - Updated camera configuration and image capture calls to use CSI methods.
 - Verified that MJPEG video recording continues to function correctly after the migration.
 - Confirmed successful video creation on the microSD card using the CSI backend.
+
+## 2026-06-12
+### microSD Card Recovery
+
+- Used a microSD card reader for troubleshooting.
+- Reformatted the original microSD card using a PC.
+- Reinserted the card into the OpenMV N6 and verified successful detection by the firmware.
+- Confirmed that `/sdcard` is mounted and accessible through MicroPython.
+- Verified successful creation and access of the `motion_capture` directory.
+
+### Recording Validation
+
+- Tested Camera class functionality using the recovered microSD card.
+- Confirmed that MJPEG recordings can be created successfully on the restored card.
+- Verified end-to-end operation of the recording pipeline after storage recovery.
