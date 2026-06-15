@@ -6,6 +6,7 @@ class StorageConfig:
         self._image_prefix = "pic_"
         self._video_suffix = ".mjpeg"
         self._image_suffix = ".jpg"
+        self._initial_file_number = -1
 
     def video_folder(self):
         return self._video_folder
@@ -24,3 +25,6 @@ class StorageConfig:
 
     def image_suffix(self):
         return self._image_suffix
+
+    def initial_file_number(self):
+        return self._initial_file_number

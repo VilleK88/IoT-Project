@@ -216,3 +216,10 @@ Second test:
 - Moved storage paths, filename prefixes, and file extensions into centralized configuration objects.
 - Updated Camera to use configuration accessors instead of hardcoded values.
 - Improved separation of responsibilities and reduced the number of configuration variables stored directly in the Camera class.
+
+## 2026-06-15
+### Camera Code Cleanup
+
+- Added clearer technical comments to the Camera class.
+- Documented camera initialization, storage setup, motion detection, recording flow, and frame differencing behavior.
+- Removed remaining magic numbers by moving timing and default values into configuration classes.

@@ -9,20 +9,22 @@ import time
 
 class Camera:
     def __init__(self):
+        # Initialize the OpenMV N6 CSI camera interface
         self.csi0 = csi.CSI()
         self.csi0.reset()
         self.csi0.pixformat(csi.RGB565)
         self.csi0.framesize(csi.QVGA)
-        print("camera created")
 
+        # Status LED is used to indicat active recording
         self._led = machine.LED("LED_RED")
-        print("Created a handle to the OpenMV red status LED")
 
+        # Load storage seggints and ensure output folders exist
         self._storage_config = StorageConfig()
 
         self.create_directory(self._storage_config.video_folder())
         self.create_directory(self._storage_config.image_folder())
 
+        # Continue numbering from the highest existing file number
         self._video_count = self.get_next_file_num(
             self._storage_config.video_folder(),
             self._storage_config.video_prefix(),
@@ -35,17 +37,17 @@ class Camera:
             self._storage_config.image_suffix()
         )
 
+        # Load motion detection thresholds and timing settings
         self._motion_config = MotionConfig()
 
+        # Background frame used for frame differencing
         self._extra_fb = self.csi0.snapshot().copy()
-        print("About to save background image...")
 
         # Allow the camera image to stabilize before capturing
         # the initial background frame
-        time.sleep_ms(2000)
-        self.stabilize_camera(100)
+        time.sleep_ms(self._motion_config.stabilization_delay_ms())
+        self.stabilize_camera(self._motion_config.stabilization_frames())
 
-        print("Saved background image")
         self._triggered = False
         self._frame_count = 0
 
@@ -76,6 +78,7 @@ class Camera:
     def take_picture(self):
         img = self.csi0.snapshot()
 
+        # Build a unique filename using the configured folder, prefix and suffix
         filename = "%s/%s%05d%s" % (
             self._storage_config.image_folder(),
             self._storage_config.image_prefix(),
@@ -89,6 +92,7 @@ class Camera:
     def record_video(self):
         print("start recording")
 
+        # Build a unique filename using the configured folder, prefix and suffix
         filename = "%s/%s%05d%s" % (
             self._storage_config.video_folder(),
             self._storage_config.video_prefix(),
@@ -96,28 +100,43 @@ class Camera:
             self._storage_config.video_suffix()
         )
 
+        # Increment immediately so a crash does not reuse the same filename
         self._video_count += 1
         print("Recording:", filename)
         video = mjpeg.Mjpeg(filename)
+
+        # LED stays on while the camera is recording
         self._led.on()
 
+        # Motion is not checked every frame during recording.
+        # This reduces CPU load and improves stability.
         last_motion_check = time.ticks_ms()
 
         try:
             while True:
                 img = self.csi0.snapshot()
+
+                # Write the normal camera frame before motion detection modifies it
                 video.write(img)
+
                 now = time.ticks_ms()
+
+                # Periodically check whether motion is still present
                 if time.ticks_diff(now, last_motion_check) >= self._motion_config.record_check_interval_ms():
                     last_motion_check = now
                     diff = self.get_motion_diff(img)
+
                     if diff <= self._motion_config.trigger_threshold():
                         break
+
         finally:
+            # Always close the MJPEG file even if recording exits unexpectedly
             video.close()
             self._led.off()
 
         print("record_video done")
+
+        # Short cooldown helps prevent immediate repeated recordings
         time.sleep_ms(self._motion_config.post_record_cooldown_ms())
 
         self._frame_count = 0
@@ -129,7 +148,7 @@ class Camera:
         start_time = time.ticks_ms()
 
         try:
-            while time.ticks_diff(time.ticks_ms(), start_time) < duration_seconds * 1000:
+            while time.ticks_diff(time.ticks_ms(), start_time) < duration_seconds * self._motion_config.milliseconds_per_second():
                 self.csi0.snapshot()
 
         finally:
@@ -137,7 +156,7 @@ class Camera:
         print("debug recording done")
 
     def get_next_file_num(self, directory, prefix, suffix):
-        highest = -1
+        highest = self._storage_config.initial_file_number()
 
         for filename in os.listdir(directory):
             if filename.startswith(prefix) and filename.endswith(suffix):
@@ -148,12 +167,12 @@ class Camera:
 
         return highest + 1
 
-    def stabilize_camera(self, frames=30):
+    def stabilize_camera(self, frames):
         # Discard frames to allow exposure and brightness
         # to stabilize
         for _ in range(frames):
             self.csi0.snapshot()
-            time.sleep_ms(20)
+            time.sleep_ms(self._motion_config.stabilization_frame_delay_ms())
 
         # Save a fresh background frame
         self._extra_fb.replace(self.csi0.snapshot())
