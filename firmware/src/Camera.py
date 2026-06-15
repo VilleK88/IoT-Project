@@ -4,6 +4,7 @@ import machine
 import os
 import time
 
+
 class Camera:
     def __init__(self):
         self.csi0 = csi.CSI()
@@ -23,6 +24,8 @@ class Camera:
 
         self._video_count = self.get_next_file_num(self._video_folder, "video_", ".mjpeg")
         self._image_count = self.get_next_file_num(self._image_folder, "pic_", ".jpg")
+
+        self._record_motion_check_interval_ms = 3000
 
         self._trigger_threshold = 15
         self._bg_update_frames = 50
@@ -60,7 +63,6 @@ class Camera:
 
         # Motion is detected when the difference exceeds
         # the configured threshold
-        #print("diff:", diff)
         self._triggered = diff > self._trigger_threshold
 
         return self._triggered
@@ -79,9 +81,18 @@ class Camera:
         video = mjpeg.Mjpeg(filename)
         self._led.on()
 
+        last_motion_check = time.ticks_ms()
+
         try:
-            for i in range(500):
-                video.write(self.csi0.snapshot())
+            while True:
+                img = self.csi0.snapshot()
+                video.write(img)
+                now = time.ticks_ms()
+                if time.tics_diff(now, last_motion_check) >= self._record_motion_check_interval_ms:
+                    last_motion_check = now
+                    diff = self.get_motiob_diff(img)
+                    if diff <= self._trigger_threshold:
+                        break
         finally:
             video.close()
             self._led.off()

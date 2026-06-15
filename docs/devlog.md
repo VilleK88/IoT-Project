@@ -187,3 +187,23 @@ Second test:
 - Determined that the wrong part of the lens assembly had initially been rotated.
 - Adjusted the correct focus ring and improved image sharpness.
 - Confirmed that the camera hardware appears to be working correctly.
+
+## 2026-06-15
+### Motion Detection Recording Improvements
+
+- Refactored camera code to reduce duplication and improve maintainability.
+- Added separate directories for motion videos and still images.
+- Generalized file numbering logic to support both video and image files.
+- Added configurable recording motion check interval (`_record_motion_check_interval_ms`).
+- Refactored motion difference calculation into a dedicated helper function.
+- Implemented automatic video file numbering to prevent filename reuse after crashes.
+- Added proper MJPEG cleanup using `try/finally` to ensure video files are closed correctly.
+- Improved directory creation handling to distinguish between new and existing directories.
+
+### Motion Recording Logic
+
+- Reworked recording behavior to continue recording while motion remains present.
+- Replaced continuous per-frame motion checks during recording with configurable interval-based motion verification.
+- Implemented periodic motion verification during recording using a configurable timer.
+- Confirmed stable operation after resolving MJPEG recording and file corruption issues.
+- Successfully tested automatic recording start and stop based on motion activity.
