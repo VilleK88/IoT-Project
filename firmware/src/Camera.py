@@ -1,3 +1,5 @@
+from src.MotionConfig import MotionConfig
+from src.StorageConfig import StorageConfig
 import mjpeg
 import csi
 import machine
@@ -16,20 +18,24 @@ class Camera:
         self._led = machine.LED("LED_RED")
         print("Created a handle to the OpenMV red status LED")
 
-        self._video_folder = "/sdcard/motion_capture"
-        self._image_folder = "/sdcard/motion_images"
-        print("try to create a directory")
-        self.create_directory(self._video_folder)
-        self.create_directory(self._image_folder)
+        self._storage_config = StorageConfig()
 
-        self._video_count = self.get_next_file_num(self._video_folder, "video_", ".mjpeg")
-        self._image_count = self.get_next_file_num(self._image_folder, "pic_", ".jpg")
+        self.create_directory(self._storage_config.video_folder())
+        self.create_directory(self._storage_config.image_folder())
 
-        self._record_motion_check_interval_ms = 3000
+        self._video_count = self.get_next_file_num(
+            self._storage_config.video_folder(),
+            self._storage_config.video_prefix(),
+            self._storage_config.video_suffix()
+        )
 
-        self._trigger_threshold = 15
-        self._bg_update_frames = 50
-        self._bg_update_blend = 128
+        self._image_count = self.get_next_file_num(
+            self._storage_config.image_folder(),
+            self._storage_config.image_prefix(),
+            self._storage_config.image_suffix()
+        )
+
+        self._motion_config = MotionConfig()
 
         self._extra_fb = self.csi0.snapshot().copy()
         print("About to save background image...")
@@ -51,11 +57,11 @@ class Camera:
 
         # Periodically update the background image to adapt
         # to slow lighting changes
-        if self._frame_count > self._bg_update_frames:
+        if self._frame_count > self._motion_config.bg_update_frames():
             self._frame_count = 0
 
             bg_update = img.copy()
-            bg_update.blend(self._extra_fb, alpha=(255 - self._bg_update_blend))
+            bg_update.blend(self._extra_fb, alpha=(255 - self._motion_config.bg_update_blend()))
 
             self._extra_fb.replace(bg_update)
 
@@ -63,19 +69,33 @@ class Camera:
 
         # Motion is detected when the difference exceeds
         # the configured threshold
-        self._triggered = diff > self._trigger_threshold
+        self._triggered = diff > self._motion_config.trigger_threshold()
 
         return self._triggered
 
     def take_picture(self):
         img = self.csi0.snapshot()
-        filename = "%s/pic_%05d.jpg" % (self._image_folder, self._image_count)
+
+        filename = "%s/%s%05d%s" % (
+            self._storage_config.image_folder(),
+            self._storage_config.image_prefix(),
+            self._image_count,
+            self._storage_config.image_suffix()
+        )
+
         self._image_count += 1
         img.save(filename)
 
     def record_video(self):
         print("start recording")
-        filename = "%s/video_%05d.mjpeg" % (self._video_folder, self._video_count)
+
+        filename = "%s/%s%05d%s" % (
+            self._storage_config.video_folder(),
+            self._storage_config.video_prefix(),
+            self._video_count,
+            self._storage_config.video_suffix()
+        )
+
         self._video_count += 1
         print("Recording:", filename)
         video = mjpeg.Mjpeg(filename)
@@ -88,20 +108,33 @@ class Camera:
                 img = self.csi0.snapshot()
                 video.write(img)
                 now = time.ticks_ms()
-                if time.tics_diff(now, last_motion_check) >= self._record_motion_check_interval_ms:
+                if time.ticks_diff(now, last_motion_check) >= self._motion_config.record_check_interval_ms():
                     last_motion_check = now
-                    diff = self.get_motiob_diff(img)
-                    if diff <= self._trigger_threshold:
+                    diff = self.get_motion_diff(img)
+                    if diff <= self._motion_config.trigger_threshold():
                         break
         finally:
             video.close()
             self._led.off()
 
         print("record_video done")
+        time.sleep_ms(self._motion_config.post_record_cooldown_ms())
 
-        # Refresh the camera and background image after recording
-        #self.stabilize_camera()
         self._frame_count = 0
+
+    def debug_record_video(self, duration_seconds=10):
+        print("debug recording start")
+        self._led.on()
+
+        start_time = time.ticks_ms()
+
+        try:
+            while time.ticks_diff(time.ticks_ms(), start_time) < duration_seconds * 1000:
+                self.csi0.snapshot()
+
+        finally:
+            self._led.off()
+        print("debug recording done")
 
     def get_next_file_num(self, directory, prefix, suffix):
         highest = -1
@@ -134,11 +167,10 @@ class Camera:
 
     def get_motion_diff(self, img):
         # Compare the current frame against the background image
-        diff_img = img.copy()
-        diff_img.difference(self._extra_fb)
+        img.difference(self._extra_fb)
 
         # Calculate the amount of motion from the difference image
-        hist = diff_img.get_histogram()
+        hist = img.get_histogram()
         diff = hist.get_percentile(0.99).l_value() - hist.get_percentile(0.90).l_value()
 
         return diff

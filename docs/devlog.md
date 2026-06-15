@@ -207,3 +207,12 @@ Second test:
 - Implemented periodic motion verification during recording using a configurable timer.
 - Confirmed stable operation after resolving MJPEG recording and file corruption issues.
 - Successfully tested automatic recording start and stop based on motion activity.
+
+## 2026-06-15
+### Camera Configuration Refactor
+
+- Introduced dedicated `MotionConfig` and `StorageConfig` classes.
+- Moved motion detection thresholds, timing values, and recording settings out of the Camera class.
+- Moved storage paths, filename prefixes, and file extensions into centralized configuration objects.
+- Updated Camera to use configuration accessors instead of hardcoded values.
+- Improved separation of responsibilities and reduced the number of configuration variables stored directly in the Camera class.
