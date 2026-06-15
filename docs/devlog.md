@@ -59,16 +59,6 @@ Second test:
 * Added initial project documentation and devlog infrastructure.
 * Began maintaining project progress through version control.
 
-### Next Steps
-
-* Learn OpenMV N6 camera functionality and continuous frame capture workflow.
-* Investigate motion detection methods supported by OpenMV N6.
-* Design a rolling RAM buffer that continuously stores approximately the latest 10 seconds of captured frames.
-* Implement motion-triggered recording where saved footage includes the 10 seconds captured before the motion event.
-* Continue recording for as long as motion is detected.
-* Add an inactivity timeout so recording stops only after motion has ended.
-* Evaluate memory usage, frame rate, resolution, and compression options for the 10-second pre-event buffer.
-
 ## 2026-06-11
 ### OpenMV Project Structure and Deployment
 
@@ -96,11 +86,6 @@ Second test:
 - The deployment script copies `firmware/main.py` to the OpenMV root.
 - The deployment script copies the full `firmware/src` folder to the OpenMV filesystem.
 - This removes the need to manually copy files after each code change.
-
-### Next Steps
-
-- Continue implementing motion-triggered MJPEG recording.
-- Build the first version where motion detection starts video recording.
 
 ## 2026-06-12
 ### SD Card Debugging
@@ -139,13 +124,6 @@ Second test:
 - Added recording path diagnostics to simplify future debugging.
 - Confirmed successful end-to-end recording workflow using the replacement microSD card.
 
-### Next Steps
-
-- Implement frame differencing based motion detection.
-- Create a rolling RAM buffer for approximately 10 seconds of pre-event footage.
-- Trigger MJPEG recording automatically when motion is detected.
-- Save buffered frames preceding the motion event before continuing live recording.
-
 ## 2026-06-12
 ### CSI Camera Migration
 
@@ -180,9 +158,32 @@ Second test:
 - Verified histogram-based motion detection logic using CSI camera frames.
 - Confirmed successful motion detection operation on the OpenMV N6.
 
-### Next Steps
+## 2026-06-15
+### OpenMV N6 USB Connectivity Troubleshooting
 
-- Implement a 10-second circular RAM buffer for video frames.
-- Store pre-motion frames in memory before motion is detected.
-- Begin automatic recording when motion is detected while preserving the buffered footage.
-- Continue development and testing on Monday.
+- Investigated an issue where the OpenMV N6 was not detected by OpenMV IDE or Windows Device Manager.
+- Confirmed that the board was receiving power, indicated by the red power LED.
+- Tested the newly purchased USB-A to USB-C cable with a mobile phone and verified that the cable supports data transfer.
+- Determined that the issue was not caused by the OpenMV N6 board or the USB cable.
+- Isolated the problem to the existing Logik USB hub.
+- Confirmed that the OpenMV N6 is detected correctly when connected directly to the laptop's USB-A port.
+- Successfully re-established communication with OpenMV IDE using a direct USB connection.
+- Development can continue without hardware changes by connecting the board directly to the laptop.
+
+### Notes
+
+- Current USB hub appears incompatible with the OpenMV N6 despite providing power.
+- Future upgrade planned to a higher-quality USB 3.x hub with both USB-A and USB-C ports.
+
+## 2026-06-15
+### OpenMV N6 Camera Focus and USB Troubleshooting
+
+- Troubleshot OpenMV N6 USB connectivity issue.
+- Verified that the USB-A to USB-C cable supports data transfer by testing it with a mobile phone.
+- Confirmed that the issue was caused by the USB hub, not the OpenMV N6 board or cable.
+- Re-established OpenMV IDE connection by connecting the board directly to the laptop USB-A port.
+- Investigated persistent blurry camera image.
+- Checked OpenMV documentation and confirmed that the lens requires manual focusing.
+- Determined that the wrong part of the lens assembly had initially been rotated.
+- Adjusted the correct focus ring and improved image sharpness.
+- Confirmed that the camera hardware appears to be working correctly.
