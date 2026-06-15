@@ -1,30 +1,30 @@
 class StorageConfig:
     def __init__(self):
-        self._video_folder = "/sdcard/motion_capture"
-        self._image_folder = "/sdcard/motion_images"
-        self._video_prefix = "video_"
-        self._image_prefix = "pic_"
-        self._video_suffix = ".mjpeg"
-        self._image_suffix = ".jpg"
-        self._initial_file_number = -1
+        self._vid_dir = "/sdcard/motion_capture"
+        self._img_dir = "/sdcard/motion_images"
+        self._vid_prefix = "video_"
+        self._img_prefix = "pic_"
+        self._vid_suffix = ".mjpeg"
+        self._img_suffix = ".jpg"
+        self._init_file_num = -1
 
-    def video_folder(self):
-        return self._video_folder
+    def vid_dir(self):
+        return self._vid_dir
 
-    def image_folder(self):
-        return self._image_folder
+    def img_dir(self):
+        return self._img_dir
 
-    def video_prefix(self):
-        return self._video_prefix
+    def vid_prefix(self):
+        return self._vid_prefix
 
-    def image_prefix(self):
-        return self._image_prefix
+    def img_prefix(self):
+        return self._img_prefix
 
-    def video_suffix(self):
-        return self._video_suffix
+    def vid_suffix(self):
+        return self._vid_suffix
 
-    def image_suffix(self):
-        return self._image_suffix
+    def img_suffix(self):
+        return self._img_suffix
 
-    def initial_file_number(self):
-        return self._initial_file_number
+    def init_file_num(self):
+        return self._init_file_num

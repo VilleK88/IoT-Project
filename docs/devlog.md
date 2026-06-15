@@ -223,3 +223,16 @@ Second test:
 - Added clearer technical comments to the Camera class.
 - Documented camera initialization, storage setup, motion detection, recording flow, and frame differencing behavior.
 - Removed remaining magic numbers by moving timing and default values into configuration classes.
+
+## 2026-06-15
+### RAM Buffer and File Handling Refactor
+
+- Added `BufferConfig` class for RAM circular buffer settings.
+- Added configurable buffer duration, buffer FPS, and calculated buffer size.
+- Implemented circular RAM frame buffer infrastructure for pre-motion frame storage.
+- Added timed frame buffering to store frames at a controlled rate instead of every camera frame.
+- Refactored storage naming to shorter `vid` and `img` terminology.
+- Refactored duplicated image/video filename construction into reusable `build_filename()` helper.
+- Updated image and video counters to use the shared filename builder.
+- Verified that RAM buffering works during normal motion monitoring without crashes.
+- Confirmed that RAM buffering and MJPEG debug recording work together when frame differencing is excluded from the recording loop.

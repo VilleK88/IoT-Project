@@ -1,5 +1,6 @@
 from src.MotionConfig import MotionConfig
 from src.StorageConfig import StorageConfig
+from src.BufferConfig import BufferConfig
 import mjpeg
 import csi
 import machine
@@ -15,26 +16,26 @@ class Camera:
         self.csi0.pixformat(csi.RGB565)
         self.csi0.framesize(csi.QVGA)
 
-        # Status LED is used to indicat active recording
+        # Status LED is used to indicate active recording
         self._led = machine.LED("LED_RED")
 
-        # Load storage seggints and ensure output folders exist
+        # Load storage settings and ensure output folders exist
         self._storage_config = StorageConfig()
 
-        self.create_directory(self._storage_config.video_folder())
-        self.create_directory(self._storage_config.image_folder())
+        self.create_directory(self._storage_config.vid_dir())
+        self.create_directory(self._storage_config.img_dir())
 
         # Continue numbering from the highest existing file number
-        self._video_count = self.get_next_file_num(
-            self._storage_config.video_folder(),
-            self._storage_config.video_prefix(),
-            self._storage_config.video_suffix()
+        self._vid_count = self.get_next_file_num(
+            self._storage_config.vid_dir(),
+            self._storage_config.vid_prefix(),
+            self._storage_config.vid_suffix()
         )
 
-        self._image_count = self.get_next_file_num(
-            self._storage_config.image_folder(),
-            self._storage_config.image_prefix(),
-            self._storage_config.image_suffix()
+        self._img_count = self.get_next_file_num(
+            self._storage_config.img_dir(),
+            self._storage_config.img_prefix(),
+            self._storage_config.img_suffix()
         )
 
         # Load motion detection thresholds and timing settings
@@ -50,6 +51,11 @@ class Camera:
 
         self._triggered = False
         self._frame_count = 0
+
+        self._buffer_config = BufferConfig()
+        self._frame_buffer = [None] * self._buffer_config.buffer_size()
+        self._buffer_index = 0
+        self._last_buffer_frame_time = time.ticks_ms()
 
     def detect_motion(self):
         # Capture the current frame
@@ -67,6 +73,7 @@ class Camera:
 
             self._extra_fb.replace(bg_update)
 
+        self.update_frame_buffer(img)
         diff = self.get_motion_diff(img)
 
         # Motion is detected when the difference exceeds
@@ -79,29 +86,25 @@ class Camera:
         img = self.csi0.snapshot()
 
         # Build a unique filename using the configured folder, prefix and suffix
-        filename = "%s/%s%05d%s" % (
-            self._storage_config.image_folder(),
-            self._storage_config.image_prefix(),
-            self._image_count,
-            self._storage_config.image_suffix()
+        filename = self.build_filename(
+            self._storage_config.img_dir(),
+            self._storage_config.img_prefix(),
+            self._storage_config.img_suffix(),
+            self._img_count
         )
-
-        self._image_count += 1
+        self._img_count += 1
         img.save(filename)
 
     def record_video(self):
         print("start recording")
 
-        # Build a unique filename using the configured folder, prefix and suffix
-        filename = "%s/%s%05d%s" % (
-            self._storage_config.video_folder(),
-            self._storage_config.video_prefix(),
-            self._video_count,
-            self._storage_config.video_suffix()
+        filename = self.build_filename(
+            self._storage_config.vid_dir(),
+            self._storage_config.vid_prefix(),
+            self._storage_config.vid_suffix(),
+            self._vid_count
         )
-
-        # Increment immediately so a crash does not reuse the same filename
-        self._video_count += 1
+        self._vid_count += 1
         print("Recording:", filename)
         video = mjpeg.Mjpeg(filename)
 
@@ -141,22 +144,30 @@ class Camera:
 
         self._frame_count = 0
 
-    def debug_record_video(self, duration_seconds=10):
+    def debug_record_video(self, frames=300):
         print("debug recording start")
         self._led.on()
 
-        start_time = time.ticks_ms()
+        filename = "%s/debug_test%s" % (
+                self._storage_config.vid_dir(),
+                self._storage_config.vid_suffix()
+        )
+
+        video = mjpeg.Mjpeg(filename)
 
         try:
-            while time.ticks_diff(time.ticks_ms(), start_time) < duration_seconds * self._motion_config.milliseconds_per_second():
-                self.csi0.snapshot()
+            for _ in range(frames):
+                img = self.csi0.snapshot()
+                video.write(img)
 
         finally:
+            video.close()
             self._led.off()
+
         print("debug recording done")
 
     def get_next_file_num(self, directory, prefix, suffix):
-        highest = self._storage_config.initial_file_number()
+        highest = self._storage_config.init_file_num()
 
         for filename in os.listdir(directory):
             if filename.startswith(prefix) and filename.endswith(suffix):
@@ -193,3 +204,38 @@ class Camera:
         diff = hist.get_percentile(0.99).l_value() - hist.get_percentile(0.90).l_value()
 
         return diff
+
+    def add_frame_to_buffer(self, img):
+        # Store a copy of the current frame into the current buffer slot
+        # A copy is needed because the original frame will be reused/modified later
+        self._frame_buffer[self._buffer_index] = img.copy()
+
+        # Move to the next buffer slot
+        # The modulo operator wraps the index back to 0 when the end is reached
+        self._buffer_index = (self._buffer_index + 1) % self._buffer_config.buffer_size()
+
+    def update_frame_buffer(self, img):
+        now = time.ticks_ms()
+
+        # Calculate how often a frame should be added to the RAM buffer
+        # Example: 1000 ms / 2 FPS = one buffered frame every 500 ms
+        interval_ms = (
+            self._motion_config.milliseconds_per_second()
+            // self._buffer_config.buffer_fps()
+        )
+
+        # Only store a frame when enough time has passed
+        # This prevents storing every camera frame and reduces RAM usage
+        if time.ticks_diff(now, self._last_buffer_frame_time) >= interval_ms:
+            self.add_frame_to_buffer(img)
+            self._last_buffer_frame_time = now
+
+    def build_filename(self, directory, prefix, suffix, count):
+        # Build a unique filename using the configured folder, prefix and suffix
+        filename = "%s/%s%05d%s" % (
+            directory,
+            prefix,
+            count,
+            suffix
+        )
+        return filename
