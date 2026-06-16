@@ -6,24 +6,25 @@ import csi
 import machine
 import os
 import time
+import image
 
 
 class Camera:
     def __init__(self):
-        # Initialize the OpenMV N6 CSI camera interface
-        self.csi0 = csi.CSI()
-        self.csi0.reset()
-        self.csi0.pixformat(csi.RGB565)
-        self.csi0.framesize(csi.QVGA)
+        self.csi0 = csi.CSI() # Initialize the OpenMV N6 CSI camera interface
+        self.csi0.reset() # Reset and initialize the sensor
+        self.csi0.pixformat(csi.RGB565) # Set pixel format to RGB565 (or GRAYSCALE)
+        self.csi0.framesize(csi.QVGA) # Set frame size to QVGA (320x240)
+        self.csi0.snapshot(time=2000) # Wait for settings take effect
+        self.csi0.auto_whitebal(False) # Turn off white balance
 
-        # Status LED is used to indicate active recording
-        self._led = machine.LED("LED_RED")
+        self._led = machine.LED("LED_RED") # Status LED is used to indicate active recording
 
-        # Load storage settings and ensure output folders exist
-        self._storage_config = StorageConfig()
+        self._storage_config = StorageConfig() # Load storage settings and ensure output folders exist
 
         self.create_directory(self._storage_config.vid_dir())
         self.create_directory(self._storage_config.img_dir())
+        self.create_directory(self._storage_config.temp_dir())
 
         # Continue numbering from the highest existing file number
         self._vid_count = self.get_next_file_num(
@@ -41,8 +42,13 @@ class Camera:
         # Load motion detection thresholds and timing settings
         self._motion_config = MotionConfig()
 
-        # Background frame used for frame differencing
-        self._extra_fb = self.csi0.snapshot().copy()
+        # Create a second frame buffer on the heap
+        self._extra_fb = image.Image(self.csi0.width(), self.csi0.height(), self.csi0.pixformat())
+
+        print("About to save background image...")
+        self.csi0.snapshot(time=2000) # Give the user time to get ready
+        self._extra_fb.draw_image(self.csi0.snapshot())
+        print("Saved background image - Now frame differencing!")
 
         # Allow the camera image to stabilize before capturing
         # the initial background frame
@@ -52,32 +58,30 @@ class Camera:
         self._triggered = False
         self._frame_count = 0
 
+
+        # Butter settings
         self._buffer_config = BufferConfig()
         self._frame_buffer = [None] * self._buffer_config.buffer_size()
         self._buffer_index = 0
         self._last_buffer_frame_time = time.ticks_ms()
 
     def detect_motion(self):
-        # Capture the current frame
-        img = self.csi0.snapshot()
+        img = self.csi0.snapshot() # Take a picture and return the image
 
         self._frame_count += 1
-
-        # Periodically update the background image to adapt
-        # to slow lighting changes
         if self._frame_count > self._motion_config.bg_update_frames():
             self._frame_count = 0
+            # Blend in new frame
+            img.blend(self._extra_fb, alpha=(255 - self._motion_config.bg_update_blend()))
+            self._extra_fb.draw_image(img)
 
-            bg_update = img.copy()
-            bg_update.blend(self._extra_fb, alpha=(255 - self._motion_config.bg_update_blend()))
+        # Replace the image with the "abs(NEW_OLD)" frame difference
+        img.difference(self._extra_fb)
 
-            self._extra_fb.replace(bg_update)
+        hist = img.get_histogram()
+        diff = hist.get_percentile(0.99).l_value() - hist.get_percentile(0.90).l_value()
 
-        self.update_frame_buffer(img)
-        diff = self.get_motion_diff(img)
-
-        # Motion is detected when the difference exceeds
-        # the configured threshold
+        # Motion is detected when the difference exceeds the configured threshold
         self._triggered = diff > self._motion_config.trigger_threshold()
 
         return self._triggered
@@ -111,6 +115,7 @@ class Camera:
         # LED stays on while the camera is recording
         self._led.on()
 
+        self.csi0.auto_whitebal(True)
         # Motion is not checked every frame during recording.
         # This reduces CPU load and improves stability.
         last_motion_check = time.ticks_ms()
@@ -118,7 +123,6 @@ class Camera:
         try:
             while True:
                 img = self.csi0.snapshot()
-
                 # Write the normal camera frame before motion detection modifies it
                 video.write(img)
 
@@ -131,6 +135,8 @@ class Camera:
 
                     if diff <= self._motion_config.trigger_threshold():
                         break
+                    else:
+                        print("Motion detected while recording")
 
         finally:
             # Always close the MJPEG file even if recording exits unexpectedly
@@ -138,7 +144,7 @@ class Camera:
             self._led.off()
 
         print("record_video done")
-
+        self.csi0.auto_whitebal(False)
         # Short cooldown helps prevent immediate repeated recordings
         time.sleep_ms(self._motion_config.post_record_cooldown_ms())
 

@@ -236,3 +236,13 @@ Second test:
 - Updated image and video counters to use the shared filename builder.
 - Verified that RAM buffering works during normal motion monitoring without crashes.
 - Confirmed that RAM buffering and MJPEG debug recording work together when frame differencing is excluded from the recording loop.
+
+## 2026-06-16
+### Motion Detection Alignment with Updated OpenMV Examples
+
+- Reviewed the latest OpenMV CSI camera examples from the official repository.
+- Updated camera initialization to follow the current CSI-based example implementations.
+- Updated motion detection logic using guidance from the latest frame differencing examples.
+- Updated recording workflow based on the latest MJPEG motion recording examples.
+- Investigated the interaction between frame differencing, MJPEG recording, and automatic white balance.
+- Verified that motion detection and recording continue to operate correctly after the example-based updates.

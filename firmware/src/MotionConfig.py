@@ -4,7 +4,7 @@ class MotionConfig:
         self._bg_update_frames = 50
         self._bg_update_blend = 128
         self._record_check_interval_ms = 3000
-        self._post_record_cooldown_ms = 2000
+        self._post_record_cooldown_ms = 1000
         self._main_loop_cooldown_ms = 1000
         self._debug_record_duration_seconds = 10
         self._milliseconds_per_second = 1000
