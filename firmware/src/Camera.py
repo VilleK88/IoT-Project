@@ -7,6 +7,7 @@ import machine
 import os
 import time
 import image
+import gc
 
 
 class Camera:
@@ -45,19 +46,10 @@ class Camera:
         # Create a second frame buffer on the heap
         self._extra_fb = image.Image(self.csi0.width(), self.csi0.height(), self.csi0.pixformat())
 
-        print("About to save background image...")
-        self.csi0.snapshot(time=2000) # Give the user time to get ready
-        self._extra_fb.draw_image(self.csi0.snapshot())
-        print("Saved background image - Now frame differencing!")
-
-        # Allow the camera image to stabilize before capturing
-        # the initial background frame
-        time.sleep_ms(self._motion_config.stabilization_delay_ms())
-        self.stabilize_camera(self._motion_config.stabilization_frames())
+        self.save_bg_img(2000)
 
         self._triggered = False
         self._frame_count = 0
-
 
         # Butter settings
         self._buffer_config = BufferConfig()
@@ -150,28 +142,6 @@ class Camera:
 
         self._frame_count = 0
 
-    def debug_record_video(self, frames=300):
-        print("debug recording start")
-        self._led.on()
-
-        filename = "%s/debug_test%s" % (
-                self._storage_config.vid_dir(),
-                self._storage_config.vid_suffix()
-        )
-
-        video = mjpeg.Mjpeg(filename)
-
-        try:
-            for _ in range(frames):
-                img = self.csi0.snapshot()
-                video.write(img)
-
-        finally:
-            video.close()
-            self._led.off()
-
-        print("debug recording done")
-
     def get_next_file_num(self, directory, prefix, suffix):
         highest = self._storage_config.init_file_num()
 
@@ -183,16 +153,6 @@ class Camera:
                     highest = number
 
         return highest + 1
-
-    def stabilize_camera(self, frames):
-        # Discard frames to allow exposure and brightness
-        # to stabilize
-        for _ in range(frames):
-            self.csi0.snapshot()
-            time.sleep_ms(self._motion_config.stabilization_frame_delay_ms())
-
-        # Save a fresh background frame
-        self._extra_fb.replace(self.csi0.snapshot())
 
     def create_directory(self, path):
         try:
@@ -211,31 +171,6 @@ class Camera:
 
         return diff
 
-    def add_frame_to_buffer(self, img):
-        # Store a copy of the current frame into the current buffer slot
-        # A copy is needed because the original frame will be reused/modified later
-        self._frame_buffer[self._buffer_index] = img.copy()
-
-        # Move to the next buffer slot
-        # The modulo operator wraps the index back to 0 when the end is reached
-        self._buffer_index = (self._buffer_index + 1) % self._buffer_config.buffer_size()
-
-    def update_frame_buffer(self, img):
-        now = time.ticks_ms()
-
-        # Calculate how often a frame should be added to the RAM buffer
-        # Example: 1000 ms / 2 FPS = one buffered frame every 500 ms
-        interval_ms = (
-            self._motion_config.milliseconds_per_second()
-            // self._buffer_config.buffer_fps()
-        )
-
-        # Only store a frame when enough time has passed
-        # This prevents storing every camera frame and reduces RAM usage
-        if time.ticks_diff(now, self._last_buffer_frame_time) >= interval_ms:
-            self.add_frame_to_buffer(img)
-            self._last_buffer_frame_time = now
-
     def build_filename(self, directory, prefix, suffix, count):
         # Build a unique filename using the configured folder, prefix and suffix
         filename = "%s/%s%05d%s" % (
@@ -245,3 +180,39 @@ class Camera:
             suffix
         )
         return filename
+
+    def write_to_memory_stream(self):
+        print("memory before writing to memory stream:", gc.mem_free())
+        N_FRAMES = 200
+        self.csi0.auto_whitebal(True)
+        self.csi0.window((120, 120))
+        self.csi0.snapshot(time=2000)
+
+        # Write to memory stream
+        stream = image.ImageIO((120, 120, csi.RGB565), N_FRAMES)
+        print("Start writing to memory stream")
+        for i in range(0, N_FRAMES):
+            stream.write(self.csi0.snapshot())
+
+        print("End writing to memory stream")
+
+        print("Start reading from memory stream")
+        stream.seek(0)
+        for i in range(0, N_FRAMES):
+            img = stream.read(copy_to_fb=True, pause=True)
+        print("Stop reading from memory stream")
+        print("memory after writing to memory stream:", gc.mem_free())
+        self.cleanup_memory()
+        print("memory after cleanup memory:", gc.mem_free())
+
+        self.csi0.auto_whitebal(False)
+        self.save_bg_img(1000)
+
+    def save_bg_img(self, time_ms):
+        print("About to save background image...")
+        self.csi0.snapshot(time=time_ms) # Give the user time to get ready
+        self._extra_fb.draw_image(self.csi0.snapshot())
+        print("Saved background image - Now frame differencing!")
+
+    def cleanup_memory(self):
+        gc.collect()

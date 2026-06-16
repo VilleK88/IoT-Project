@@ -246,3 +246,13 @@ Second test:
 - Updated recording workflow based on the latest MJPEG motion recording examples.
 - Investigated the interaction between frame differencing, MJPEG recording, and automatic white balance.
 - Verified that motion detection and recording continue to operate correctly after the example-based updates.
+
+## 2026-06-16
+### ImageIO Memory Buffer Investigation
+
+- Evaluated OpenMV ImageIO memory streams as a potential implementation for the required RAM-based pre-recording buffer.
+- Successfully stored and replayed image frames directly from RAM using ImageIO.
+- Observed that repeated ImageIO usage could exhaust fast frame buffer memory.
+- Identified that `img.get_histogram()` may trigger `MemoryError: Out of fast frame buffer stack memory` after ImageIO operations if memory is not explicitly released.
+- Verified that calling `gc.collect()` immediately after ImageIO stream usage prevents the frame buffer memory exhaustion issue.
+- Continued investigating memory management requirements for a long-running circular RAM buffer implementation.
