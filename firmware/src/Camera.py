@@ -1,6 +1,7 @@
 from src.MotionConfig import MotionConfig
 from src.StorageConfig import StorageConfig
 from src.BufferConfig import BufferConfig
+from src.VideoFileManager import VideoFileManager
 import mjpeg
 import csi
 import machine
@@ -22,26 +23,27 @@ class Camera:
         self._led = machine.LED("LED_RED") # Status LED is used to indicate active recording
 
         self._storage_config = StorageConfig() # Load storage settings and ensure output folders exist
+        self._file_manager = VideoFileManager(self._storage_config)
 
-        self.create_directory(self._storage_config.vid_dir())
-        self.create_directory(self._storage_config.img_dir())
-        self.create_directory(self._storage_config.temp_dir())
-        self.create_directory(self._storage_config.pre_buf_dir())
+        self._file_manager.create_directory(self._storage_config.vid_dir())
+        self._file_manager.create_directory(self._storage_config.img_dir())
+        self._file_manager.create_directory(self._storage_config.temp_dir())
+        self._file_manager.create_directory(self._storage_config.pre_buf_dir())
 
         # Continue numbering from the highest existing file number
-        self._vid_count = self.get_next_file_num(
+        self._vid_count = self._file_manager.get_next_file_num(
             self._storage_config.vid_dir(),
             self._storage_config.vid_prefix(),
             self._storage_config.vid_suffix()
         )
 
-        self._img_count = self.get_next_file_num(
+        self._img_count = self._file_manager.get_next_file_num(
             self._storage_config.img_dir(),
             self._storage_config.img_prefix(),
             self._storage_config.img_suffix()
         )
 
-        self._pre_buf_count = self.get_next_file_num(
+        self._pre_buf_count = self._file_manager.get_next_file_num(
             self._storage_config.pre_buf_dir(),
             self._storage_config.vid_prefix(),
             self._storage_config.vid_suffix()
@@ -103,7 +105,7 @@ class Camera:
         img = self.csi0.snapshot()
 
         # Build a unique filename using the configured folder, prefix and suffix
-        filename = self.build_filename(
+        filename = self._file_manager.build_filename(
             self._storage_config.img_dir(),
             self._storage_config.img_prefix(),
             self._storage_config.img_suffix(),
@@ -116,7 +118,7 @@ class Camera:
     def record_video(self):
         print("start recording")
 
-        filename = self.build_filename(
+        filename = self._file_manager.build_filename(
             self._storage_config.vid_dir(),
             self._storage_config.vid_prefix(),
             self._storage_config.vid_suffix(),
@@ -164,25 +166,6 @@ class Camera:
 
         self._frame_count = 0
 
-    def get_next_file_num(self, directory, prefix, suffix):
-        highest = self._storage_config.init_file_num()
-
-        for filename in os.listdir(directory):
-            if filename.startswith(prefix) and filename.endswith(suffix):
-                number_part = filename[len(prefix):-len(suffix)]
-                number = int(number_part)
-                if number > highest:
-                    highest = number
-
-        return highest + 1
-
-    def create_directory(self, path):
-        try:
-            os.mkdir(path)
-            print("Directory created:", path)
-        except OSError:
-            print("Directory already exists:", path)
-
     def get_motion_diff(self, img):
         # Compare the current frame against the background image
         img.difference(self._extra_fb)
@@ -192,16 +175,6 @@ class Camera:
         diff = hist.get_percentile(0.99).l_value() - hist.get_percentile(0.90).l_value()
 
         return diff
-
-    def build_filename(self, directory, prefix, suffix, count):
-        # Build a unique filename using the configured folder, prefix and suffix
-        filename = "%s/%s%05d%s" % (
-            directory,
-            prefix,
-            count,
-            suffix
-        )
-        return filename
 
     def update_frame_buffer(self, frame):
         now = time.ticks_ms()
@@ -219,7 +192,7 @@ class Camera:
 
     def save_buf_as_mjpeg(self):
         print("saving buffer")
-        filename = self.build_filename(
+        filename = self._file_manager.build_filename(
             self._storage_config.pre_buf_dir(),
             self._storage_config.vid_prefix(),
             self._storage_config.vid_suffix(),
@@ -243,58 +216,14 @@ class Camera:
                 # Skip empty slots if the buffer is not full yet
                 if frame is not None:
                     video.write(frame)
-                    #time.sleep_ms(1000 // self._buf_fps)
                     saved_frames += 1
 
         finally:
             # Finish and close the MJPEG file
             video.close()
-            self.patch_mjpeg_timing(filename, saved_frames, duration_ms)
+            self._file_manager.patch_mjpeg_timing(filename, saved_frames, duration_ms)
 
         print("buffer saved, frames:", saved_frames)
-
-    def write_u32_le(self, file, value):
-        file.write(bytes([
-            value & 0xFF,
-            value >> 8 & 0xFF,
-            value >> 16 & 0xFF,
-            value >> 24 & 0xFF
-        ]))
-
-    def patch_u32(self, file, offset, value):
-        file.seek(offset)
-        self.write_u32_le(file, value)
-
-    def patch_mjpeg_timing(self, filename, frames, duration_ms):
-        if frames <= 0 or duration_ms <= 0:
-            return
-
-        time_scale = 1000
-
-        us_avg = (duration_ms * 1000) // frames
-        rate = (1000000 * time_scale) // us_avg
-        length = (frames * time_scale) // rate
-
-        micros_offs = 8 * 4
-        frames_offs = 12 * 4
-        rate_0_offs = 19 * 4
-        len_0_offs = 21 * 4
-        rate_1_offs = 33 * 4
-        len_1_offs = 35 * 4
-
-        with open(filename, "r+b") as file:
-            self.patch_u32(file, micros_offs, us_avg)
-            self.patch_u32(file, frames_offs, frames)
-            self.patch_u32(file, rate_0_offs, rate)
-            self.patch_u32(file, len_0_offs, length)
-            self.patch_u32(file, rate_1_offs, rate)
-            self.patch_u32(file, len_1_offs, length)
-
-        print("Patched MJPEG timing")
-        print("Frames:", frames)
-        print("Duration ms:", duration_ms)
-        print("FPS:", (frames * 1000) // duration_ms)
-
 
     def save_bg_img(self, time_ms):
         print("About to save background image...")

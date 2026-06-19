@@ -1,7 +1,6 @@
 from src.Camera import Camera
 import gc
 import time
-import image
 
 print("memory at start:", gc.mem_free())
 camera = Camera()

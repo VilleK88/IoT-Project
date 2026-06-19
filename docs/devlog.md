@@ -274,3 +274,14 @@ Current result:
 - Pre-motion video buffering in RAM is operational.
 - Buffered video can be saved to storage as MJPEG.
 - Playback timing improvements are being tested.
+
+## 2026-06-19
+Refactored Camera file-management logic.
+
+- Created VideoFileManager for file-related responsibilities.
+- Moved filename generation, directory handling, file numbering, and MJPEG timing patching out of Camera.
+- Reduced Camera class responsibilities to camera setup, motion detection, buffering, and recording flow.
+- Improved separation between camera logic and storage/file-management logic.
+
+Current status:
+Camera.py is cleaner and file-management logic is now isolated in VideoFileManager.
