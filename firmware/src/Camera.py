@@ -26,6 +26,7 @@ class Camera:
         self.create_directory(self._storage_config.vid_dir())
         self.create_directory(self._storage_config.img_dir())
         self.create_directory(self._storage_config.temp_dir())
+        self.create_directory(self._storage_config.pre_buf_dir())
 
         # Continue numbering from the highest existing file number
         self._vid_count = self.get_next_file_num(
@@ -40,6 +41,12 @@ class Camera:
             self._storage_config.img_suffix()
         )
 
+        self._pre_buf_count = self.get_next_file_num(
+            self._storage_config.pre_buf_dir(),
+            self._storage_config.vid_prefix(),
+            self._storage_config.vid_suffix()
+        )
+
         # Load motion detection thresholds and timing settings
         self._motion_config = MotionConfig()
 
@@ -51,20 +58,24 @@ class Camera:
         self._triggered = False
         self._frame_count = 0
 
-        # Butter settings
-        self._buffer_config = BufferConfig()
-        self._frame_buffer = [None] * self._buffer_config.buffer_size()
-        self._buffer_index = 0
-        self._last_buffer_frame_time = time.ticks_ms()
+        # Buffer settings
+        self._buf_config = BufferConfig()
+        self._buffer = [None] * self._buf_config.buf_size()
+        self._buf_index = 0
+        self._last_frame_time = 0
+        self._buf_start_time = time.ticks_ms()
 
-    def detect_motion(self):
-        img = self.csi0.snapshot() # Take a picture and return the image
+        self._last_motion_check_time = time.ticks_ms()
+
+    def detect_motion(self, img):
+        #self.csi0.auto_whitebal(False)
+        #img = self.csi0.snapshot() # Take a picture and return the image
 
         self._frame_count += 1
-        if self._frame_count > self._motion_config.bg_update_frames():
+        if self._frame_count > self._motion_config.bg_upd_frames():
             self._frame_count = 0
             # Blend in new frame
-            img.blend(self._extra_fb, alpha=(255 - self._motion_config.bg_update_blend()))
+            img.blend(self._extra_fb, alpha=(255 - self._motion_config.bg_upd_blend()))
             self._extra_fb.draw_image(img)
 
         # Replace the image with the "abs(NEW_OLD)" frame difference
@@ -74,11 +85,21 @@ class Camera:
         diff = hist.get_percentile(0.99).l_value() - hist.get_percentile(0.90).l_value()
 
         # Motion is detected when the difference exceeds the configured threshold
-        self._triggered = diff > self._motion_config.trigger_threshold()
+        self._triggered = diff > self._motion_config.trig_thresh()
 
         return self._triggered
 
+    def should_check_motion(self):
+        now = time.ticks_ms()
+
+        if time.ticks_diff(now, self._last_motion_check_time) < self._motion_config.chk_mot_ms():
+            return False
+
+        self._last_motion_check_time = now
+        return True
+
     def take_picture(self):
+        self.csi0.auto_whitebal(True)
         img = self.csi0.snapshot()
 
         # Build a unique filename using the configured folder, prefix and suffix
@@ -90,6 +111,7 @@ class Camera:
         )
         self._img_count += 1
         img.save(filename)
+        self.csi0.auto_whitebal(False)
 
     def record_video(self):
         print("start recording")
@@ -121,11 +143,11 @@ class Camera:
                 now = time.ticks_ms()
 
                 # Periodically check whether motion is still present
-                if time.ticks_diff(now, last_motion_check) >= self._motion_config.record_check_interval_ms():
+                if time.ticks_diff(now, last_motion_check) >= self._motion_config.rec_chk_int_ms():
                     last_motion_check = now
-                    diff = self.get_motion_diff(img)
+                    diff = self.get_motion_diff(img.copy())
 
-                    if diff <= self._motion_config.trigger_threshold():
+                    if diff <= self._motion_config.trig_thresh():
                         break
                     else:
                         print("Motion detected while recording")
@@ -138,7 +160,7 @@ class Camera:
         print("record_video done")
         self.csi0.auto_whitebal(False)
         # Short cooldown helps prevent immediate repeated recordings
-        time.sleep_ms(self._motion_config.post_record_cooldown_ms())
+        time.sleep_ms(self._motion_config.post_rec_cd_ms())
 
         self._frame_count = 0
 
@@ -181,32 +203,98 @@ class Camera:
         )
         return filename
 
-    def write_to_memory_stream(self):
-        print("memory before writing to memory stream:", gc.mem_free())
-        N_FRAMES = 200
-        self.csi0.auto_whitebal(True)
-        self.csi0.window((120, 120))
-        self.csi0.snapshot(time=2000)
+    def update_frame_buffer(self, frame):
+        now = time.ticks_ms()
 
-        # Write to memory stream
-        stream = image.ImageIO((120, 120, csi.RGB565), N_FRAMES)
-        print("Start writing to memory stream")
-        for i in range(0, N_FRAMES):
-            stream.write(self.csi0.snapshot())
+        interval_ms = 1000 // self._buf_config.buf_fps()
 
-        print("End writing to memory stream")
+        if time.ticks_diff(now, self._last_frame_time) >= interval_ms:
+            #frame = self.csi0.snapshot()
+            self.save_frame(frame.copy())
+            self._last_frame_time = now
 
-        print("Start reading from memory stream")
-        stream.seek(0)
-        for i in range(0, N_FRAMES):
-            img = stream.read(copy_to_fb=True, pause=True)
-        print("Stop reading from memory stream")
-        print("memory after writing to memory stream:", gc.mem_free())
-        self.cleanup_memory()
-        print("memory after cleanup memory:", gc.mem_free())
+    def save_frame(self, frame):
+        self._buffer[self._buf_index] = frame
+        self._buf_index = (self._buf_index + 1) % self._buf_config.buf_size()
 
-        self.csi0.auto_whitebal(False)
-        self.save_bg_img(1000)
+    def save_buf_as_mjpeg(self):
+        print("saving buffer")
+        filename = self.build_filename(
+            self._storage_config.pre_buf_dir(),
+            self._storage_config.vid_prefix(),
+            self._storage_config.vid_suffix(),
+            self._pre_buf_count
+        )
+        self._pre_buf_count += 1
+
+        duration_ms = self._buf_config.buf_size() * (1000 // self._buf_config.buf_fps())
+
+        # Create a new MJPEG file on the SD card
+        video = mjpeg.Mjpeg(filename)
+
+        saved_frames = 0
+
+        try:
+            # Start from write_index because it points to the oldest frame
+            for i in range(self._buf_config.buf_size()):
+                index = (self._buf_index + i) % self._buf_config.buf_size()
+                frame = self._buffer[index]
+
+                # Skip empty slots if the buffer is not full yet
+                if frame is not None:
+                    video.write(frame)
+                    #time.sleep_ms(1000 // self._buf_fps)
+                    saved_frames += 1
+
+        finally:
+            # Finish and close the MJPEG file
+            video.close()
+            self.patch_mjpeg_timing(filename, saved_frames, duration_ms)
+
+        print("buffer saved, frames:", saved_frames)
+
+    def write_u32_le(self, file, value):
+        file.write(bytes([
+            value & 0xFF,
+            value >> 8 & 0xFF,
+            value >> 16 & 0xFF,
+            value >> 24 & 0xFF
+        ]))
+
+    def patch_u32(self, file, offset, value):
+        file.seek(offset)
+        self.write_u32_le(file, value)
+
+    def patch_mjpeg_timing(self, filename, frames, duration_ms):
+        if frames <= 0 or duration_ms <= 0:
+            return
+
+        time_scale = 1000
+
+        us_avg = (duration_ms * 1000) // frames
+        rate = (1000000 * time_scale) // us_avg
+        length = (frames * time_scale) // rate
+
+        micros_offs = 8 * 4
+        frames_offs = 12 * 4
+        rate_0_offs = 19 * 4
+        len_0_offs = 21 * 4
+        rate_1_offs = 33 * 4
+        len_1_offs = 35 * 4
+
+        with open(filename, "r+b") as file:
+            self.patch_u32(file, micros_offs, us_avg)
+            self.patch_u32(file, frames_offs, frames)
+            self.patch_u32(file, rate_0_offs, rate)
+            self.patch_u32(file, len_0_offs, length)
+            self.patch_u32(file, rate_1_offs, rate)
+            self.patch_u32(file, len_1_offs, length)
+
+        print("Patched MJPEG timing")
+        print("Frames:", frames)
+        print("Duration ms:", duration_ms)
+        print("FPS:", (frames * 1000) // duration_ms)
+
 
     def save_bg_img(self, time_ms):
         print("About to save background image...")

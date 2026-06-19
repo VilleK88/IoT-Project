@@ -1,50 +1,54 @@
 class MotionConfig:
     def __init__(self):
-        self._trigger_threshold = 15
-        self._bg_update_frames = 50
-        self._bg_update_blend = 128
-        self._record_check_interval_ms = 3000
-        self._post_record_cooldown_ms = 1000
-        self._main_loop_cooldown_ms = 1000
-        self._debug_record_duration_seconds = 10
-        self._milliseconds_per_second = 1000
-        self._stabilization_delay_ms = 2000
-        self._stabilization_frames = 100
-        self._stabilization_frame_delay_ms = 20
-        self._initial_file_number = -1
+        self._trig_thresh = 15  # Motion detection threshold
+        self._bg_upd_frames = 50  # Frames between background updates
+        self._bg_upd_blend = 128  # Background blend factor (0-255)
+        self._chk_mot_ms = 10
+        self._rec_chk_int_ms = 3000  # Motion recheck interval during recording (ms)
+        self._post_rec_cd_ms = 1000  # Cooldown after recording stops (ms)
+        self._main_loop_cd_ms = 1000  # Main loop delay (ms)
+        self._debug_rec_dur_s = 10  # Debug recording duration (s)
+        self._ms_per_s = 1000  # Milliseconds per second
+        self._stab_delay_ms = 2000  # Camera stabilization delay (ms)
+        self._stab_frames = 100  # Frames used for camera stabilization
+        self._stab_frame_delay_ms = 20  # Delay between stabilization frames (ms)
+        self._init_file_num = -1  # Initial file counter value
 
-    def trigger_threshold(self):
-        return self._trigger_threshold
+    def trig_thresh(self):
+        return self._trig_thresh
 
-    def bg_update_frames(self):
-        return self._bg_update_frames
+    def bg_upd_frames(self):
+        return self._bg_upd_frames
 
-    def bg_update_blend(self):
-        return self._bg_update_blend
+    def bg_upd_blend(self):
+        return self._bg_upd_blend
 
-    def record_check_interval_ms(self):
-        return self._record_check_interval_ms
+    def chk_mot_ms(self):
+        return self._chk_mot_ms
 
-    def post_record_cooldown_ms(self):
-        return self._post_record_cooldown_ms
+    def rec_chk_int_ms(self):
+        return self._rec_chk_int_ms
 
-    def main_loop_cooldown_ms(self):
-        return self._main_loop_cooldown_ms
+    def post_rec_cd_ms(self):
+        return self._post_rec_cd_ms
 
-    def debug_record_duration_seconds(self):
-        return self._debug_record_duration_seconds
+    def main_loop_cd_ms(self):
+        return self._main_loop_cd_ms
 
-    def milliseconds_per_second(self):
-        return self._milliseconds_per_second
+    def debug_rec_dur_s(self):
+        return self._debug_rec_dur_s
 
-    def stabilization_delay_ms(self):
-        return self._stabilization_delay_ms
+    def ms_per_s(self):
+        return self._ms_per_s
 
-    def stabilization_frames(self):
-        return self._stabilization_frames
+    def stab_delay_ms(self):
+        return self._stab_delay_ms
 
-    def stabilization_frame_delay_ms(self):
-        return self._stabilization_frame_delay_ms
+    def stab_frames(self):
+        return self._stab_frames
 
-    def initial_file_number(self):
-        return self._initial_file_number
+    def stab_frame_delay_ms(self):
+        return self._stab_frame_delay_ms
+
+    def init_file_num(self):
+        return self._init_file_num

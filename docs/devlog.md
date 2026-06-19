@@ -256,3 +256,21 @@ Second test:
 - Identified that `img.get_histogram()` may trigger `MemoryError: Out of fast frame buffer stack memory` after ImageIO operations if memory is not explicitly released.
 - Verified that calling `gc.collect()` immediately after ImageIO stream usage prevents the frame buffer memory exhaustion issue.
 - Continued investigating memory management requirements for a long-running circular RAM buffer implementation.
+
+## 2026-06-19
+Implemented RAM-based circular pre-buffer recording system.
+
+- Replaced earlier ImageIO buffering experiments with a frame-based circular buffer.
+- Added configurable buffer duration and FPS settings through BufferConfig.
+- Implemented fixed-size ring buffer storage using modulo indexing.
+- Added periodic frame sampling into RAM buffer.
+- Added MJPEG export functionality for buffered frames.
+- Implemented MJPEG timing patching based on frame count and recorded duration.
+- Refactored repeated file patching logic into helper methods.
+- Modified motion detection to operate on already captured frames instead of taking additional snapshots.
+- Continued cleanup of duplicated configuration values by moving settings into BufferConfig.
+
+Current result:
+- Pre-motion video buffering in RAM is operational.
+- Buffered video can be saved to storage as MJPEG.
+- Playback timing improvements are being tested.

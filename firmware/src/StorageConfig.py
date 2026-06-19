@@ -3,6 +3,7 @@ class StorageConfig:
         self._vid_dir = "/sdcard/motion_capture"
         self._img_dir = "/sdcard/motion_images"
         self._temp_dir = "/sdcard/temp"
+        self._pre_buf_dir = "/sdcard/prebuffer"
         self._vid_prefix = "video_"
         self._img_prefix = "pic_"
         self._vid_suffix = ".mjpeg"
@@ -17,6 +18,9 @@ class StorageConfig:
 
     def temp_dir(self):
         return self._temp_dir
+
+    def pre_buf_dir(self):
+        return self._pre_buf_dir
 
     def vid_prefix(self):
         return self._vid_prefix
