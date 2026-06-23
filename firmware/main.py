@@ -13,11 +13,12 @@ while True:
 
     camera.update_frame_buffer(img)
 
-    now = time.ticks_ms()
-    if time.ticks_diff(now, last_save_time) >= 10000:
-        camera.save_buf_as_mjpeg()
-        last_save_time = now
-
-    if camera.should_check_motion():
+    """if camera.should_check_motion():
         if camera.detect_motion(img):
             print("motion detected")
+            camera.record_video_with_prebuffer()
+            #camera.record_video()"""
+    if camera.detect_motion(img):
+        print("motion detected")
+        camera.update_frame_buffer(img)
+        camera.record_video_with_prebuffer()

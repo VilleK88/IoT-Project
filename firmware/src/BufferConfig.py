@@ -3,7 +3,7 @@ class BufferConfig:
         # How many seconds of pre-motion frames should be kept in RAM
         self._buf_sec = 10
         # How many frames per second are stored into the RAM buffer
-        self._buf_fps = 15
+        self._buf_fps = 17 # 15 tested and works
         # Total number of frames stored in the circular buffer
         # Example: 10 seconds * 2 FPS = 20 buffered frames
         self._buf_size = self._buf_sec * self._buf_fps

@@ -5,7 +5,6 @@ from src.VideoFileManager import VideoFileManager
 import mjpeg
 import csi
 import machine
-import os
 import time
 import image
 import gc
@@ -22,9 +21,10 @@ class Camera:
 
         self._led = machine.LED("LED_RED") # Status LED is used to indicate active recording
 
-        self._storage_config = StorageConfig() # Load storage settings and ensure output folders exist
+        self._storage_config = StorageConfig()
         self._file_manager = VideoFileManager(self._storage_config)
 
+        # Create directories if they don't already exist
         self._file_manager.create_directory(self._storage_config.vid_dir())
         self._file_manager.create_directory(self._storage_config.img_dir())
         self._file_manager.create_directory(self._storage_config.temp_dir())
@@ -67,12 +67,11 @@ class Camera:
         self._last_frame_time = 0
         self._buf_start_time = time.ticks_ms()
 
+        self._frame_interval_ms = 1000 // self._buf_config.buf_fps()
+
         self._last_motion_check_time = time.ticks_ms()
 
     def detect_motion(self, img):
-        #self.csi0.auto_whitebal(False)
-        #img = self.csi0.snapshot() # Take a picture and return the image
-
         self._frame_count += 1
         if self._frame_count > self._motion_config.bg_upd_frames():
             self._frame_count = 0
@@ -93,12 +92,10 @@ class Camera:
 
     def should_check_motion(self):
         now = time.ticks_ms()
-
-        if time.ticks_diff(now, self._last_motion_check_time) < self._motion_config.chk_mot_ms():
-            return False
-
-        self._last_motion_check_time = now
-        return True
+        if time.ticks_diff(now, self._last_motion_check_time) >= self._motion_config.chk_mot_ms():
+            self._last_motion_check_time = now
+            return True
+        return False
 
     def take_picture(self):
         self.csi0.auto_whitebal(True)
@@ -118,30 +115,17 @@ class Camera:
     def record_video(self):
         print("start recording")
 
-        filename = self._file_manager.build_filename(
-            self._storage_config.vid_dir(),
-            self._storage_config.vid_prefix(),
-            self._storage_config.vid_suffix(),
-            self._vid_count
-        )
-        self._vid_count += 1
-        print("Recording:", filename)
-        video = mjpeg.Mjpeg(filename)
+        filename, video = self.create_motion_video()
 
-        # LED stays on while the camera is recording
-        self._led.on()
+        self.start_recording_state()
 
-        self.csi0.auto_whitebal(True)
-        # Motion is not checked every frame during recording.
-        # This reduces CPU load and improves stability.
+        # Motion is not checked every frame during recording. This reduces CPU load and improves stability.
         last_motion_check = time.ticks_ms()
 
         try:
             while True:
                 img = self.csi0.snapshot()
-                # Write the normal camera frame before motion detection modifies it
                 video.write(img)
-
                 now = time.ticks_ms()
 
                 # Periodically check whether motion is still present
@@ -157,14 +141,111 @@ class Camera:
         finally:
             # Always close the MJPEG file even if recording exits unexpectedly
             video.close()
-            self._led.off()
+            self.stop_recording_state()
 
         print("record_video done")
-        self.csi0.auto_whitebal(False)
+
         # Short cooldown helps prevent immediate repeated recordings
         time.sleep_ms(self._motion_config.post_rec_cd_ms())
 
         self._frame_count = 0
+
+    def record_video_with_prebuffer(self):
+        print("start recording with prebuffer")
+        filename, video = self.create_motion_video()
+        saved_frames = 0
+        self.start_recording_state()
+
+        try:
+            saved_frames = self.write_prebuffer_with_catchup(video)
+
+            last_live_frame_time = time.ticks_ms()
+            last_motion_check = time.ticks_ms()
+
+            while True:
+                now = time.ticks_ms()
+
+                if time.ticks_diff(now, last_live_frame_time) < self._frame_interval_ms:
+                    continue
+
+                last_live_frame_time = now
+
+                img = self.csi0.snapshot()
+                video.write(img)
+                saved_frames += 1
+
+                # Periodically check whether motion is still present
+                if time.ticks_diff(now, last_motion_check) >= self._motion_config.rec_chk_int_ms():
+                    last_motion_check = now
+                    diff = self.get_motion_diff(img.copy())
+
+                    if diff <= self._motion_config.trig_thresh():
+                        break
+                    else:
+                        print("Motion detected while recording")
+
+        finally:
+            # Always close the MJPEG file even if recording exits unexpectedly
+            video.close()
+            self.stop_recording_state()
+
+        print("record_video done")
+
+        duration_ms = saved_frames * self._frame_interval_ms
+        self._file_manager.patch_mjpeg_timing(filename, saved_frames, duration_ms)
+
+        print("record_video_with_prebuffer done")
+        print("Saved frames:", saved_frames)
+        print("Duration ms:", duration_ms)
+
+        # Short cooldown helps prevent immediate repeated recordings
+        time.sleep_ms(self._motion_config.post_rec_cd_ms())
+
+        self._frame_count = 0
+
+    def create_motion_video(self):
+        filename = self._file_manager.build_filename(
+            self._storage_config.vid_dir(),
+            self._storage_config.vid_prefix(),
+            self._storage_config.vid_suffix(),
+            self._vid_count
+        )
+        self._vid_count += 1
+        print("Recording:", filename)
+        return filename, mjpeg.Mjpeg(filename)
+
+    def start_recording_state(self):
+        self._led.on()
+        self.csi0.auto_whitebal(True)
+
+    def stop_recording_state(self):
+        self._led.off()
+        self.csi0.auto_whitebal(False)
+
+    def write_prebuffer_with_catchup(self, video):
+        last_live_frame_time = time.ticks_ms()
+        saved_frames = 0
+        prebuf_frames = self.get_ordered_buf_frames()
+        catchup_frames = []
+
+        # Write pre-buffer while also sampling new frames during the blocking write
+        for frame in prebuf_frames:
+            video.write(frame)
+            saved_frames += 1
+
+            now = time.ticks_ms()
+
+            if time.ticks_diff(now, last_live_frame_time) >= self._frame_interval_ms:
+                img = self.csi0.snapshot()
+                catchup_frames.append(img.copy())
+                last_live_frame_time = now
+
+        # Write frames captured while the pre-buffer was being written
+        for frame in catchup_frames:
+            video.write(frame)
+            saved_frames += 1
+
+        return saved_frames
 
     def get_motion_diff(self, img):
         # Compare the current frame against the background image
@@ -182,7 +263,6 @@ class Camera:
         interval_ms = 1000 // self._buf_config.buf_fps()
 
         if time.ticks_diff(now, self._last_frame_time) >= interval_ms:
-            #frame = self.csi0.snapshot()
             self.save_frame(frame.copy())
             self._last_frame_time = now
 
@@ -200,7 +280,7 @@ class Camera:
         )
         self._pre_buf_count += 1
 
-        duration_ms = self._buf_config.buf_size() * (1000 // self._buf_config.buf_fps())
+        #duration_ms = self._buf_config.buf_size() * (1000 // self._buf_config.buf_fps())
 
         # Create a new MJPEG file on the SD card
         video = mjpeg.Mjpeg(filename)
@@ -208,22 +288,43 @@ class Camera:
         saved_frames = 0
 
         try:
-            # Start from write_index because it points to the oldest frame
-            for i in range(self._buf_config.buf_size()):
-                index = (self._buf_index + i) % self._buf_config.buf_size()
-                frame = self._buffer[index]
-
-                # Skip empty slots if the buffer is not full yet
-                if frame is not None:
-                    video.write(frame)
-                    saved_frames += 1
+            saved_frames = self.write_buf_to_video(video)
 
         finally:
             # Finish and close the MJPEG file
             video.close()
-            self._file_manager.patch_mjpeg_timing(filename, saved_frames, duration_ms)
+
+        duration_ms = saved_frames * (1000 // self._buf_config.buf_fps())
+        self._file_manager.patch_mjpeg_timing(filename, saved_frames, duration_ms)
 
         print("buffer saved, frames:", saved_frames)
+
+    def write_buf_to_video(self, video):
+        saved_frames = 0
+
+        # Start from write_index because it points to the oldest frame
+        for i in range(self._buf_config.buf_size()):
+            index = (self._buf_index + i) % self._buf_config.buf_size()
+            frame = self._buffer[index]
+
+            # Skip empty slots if the buffer is not full yet
+            if frame is not None:
+                video.write(frame)
+                saved_frames += 1
+
+        return saved_frames
+
+    def get_ordered_buf_frames(self):
+        frames = []
+
+        for i in range(self._buf_config.buf_size()):
+            index = (self._buf_index + i) % self._buf_config.buf_size()
+            frame = self._buffer[index]
+
+            if frame is not None:
+                frames.append(frame)
+
+        return frames
 
     def save_bg_img(self, time_ms):
         print("About to save background image...")

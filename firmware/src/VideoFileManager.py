@@ -47,31 +47,29 @@ class VideoFileManager:
         self.write_u32_le(file, value)
 
     def patch_mjpeg_timing(self, filename, frames, duration_ms):
-        if frames <= 0 or duration_ms <= 0:
-            return
+        if frames > 0 and duration_ms > 0:
+            time_scale = 1000
 
-        time_scale = 1000
+            us_avg = (duration_ms * 1000) // frames
+            rate = (1000000 * time_scale) // us_avg
+            length = (frames * time_scale) // rate
 
-        us_avg = (duration_ms * 1000) // frames
-        rate = (1000000 * time_scale) // us_avg
-        length = (frames * time_scale) // rate
+            micros_offs = 8 * 4
+            frames_offs = 12 * 4
+            rate_0_offs = 19 * 4
+            len_0_offs = 21 * 4
+            rate_1_offs = 33 * 4
+            len_1_offs = 35 * 4
 
-        micros_offs = 8 * 4
-        frames_offs = 12 * 4
-        rate_0_offs = 19 * 4
-        len_0_offs = 21 * 4
-        rate_1_offs = 33 * 4
-        len_1_offs = 35 * 4
+            with open(filename, "r+b") as file:
+                self.patch_u32(file, micros_offs, us_avg)
+                self.patch_u32(file, frames_offs, frames)
+                self.patch_u32(file, rate_0_offs, rate)
+                self.patch_u32(file, len_0_offs, length)
+                self.patch_u32(file, rate_1_offs, rate)
+                self.patch_u32(file, len_1_offs, length)
 
-        with open(filename, "r+b") as file:
-            self.patch_u32(file, micros_offs, us_avg)
-            self.patch_u32(file, frames_offs, frames)
-            self.patch_u32(file, rate_0_offs, rate)
-            self.patch_u32(file, len_0_offs, length)
-            self.patch_u32(file, rate_1_offs, rate)
-            self.patch_u32(file, len_1_offs, length)
-
-        print("Patched MJPEG timing")
-        print("Frames:", frames)
-        print("Duration ms:", duration_ms)
-        print("FPS:", (frames * 1000) // duration_ms)
+            print("Patched MJPEG timing")
+            print("Frames:", frames)
+            print("Duration ms:", duration_ms)
+            print("FPS:", (frames * 1000) // duration_ms)

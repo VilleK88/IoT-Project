@@ -285,3 +285,12 @@ Refactored Camera file-management logic.
 
 Current status:
 Camera.py is cleaner and file-management logic is now isolated in VideoFileManager.
+
+## 2026-06-23
+- Refactored pre-buffer recording logic into a dedicated write_prebuffer_with_catchup() helper function.
+- Added catch-up frame buffering while pre-buffer frames are being written to the MJPEG file.
+- Implemented temporary storage of newly captured frames during the blocking pre-buffer write operation.
+- Added playback of catch-up frames immediately after buffered frames to reduce the recording gap between motion detection and live recording.
+- Moved video creation logic into a reusable helper function to reduce duplication between recording methods.
+- Continued refactoring of Camera class recording functionality into smaller reusable helper methods.
+- Verified that catch-up frame buffering works correctly on OpenMV N6 hardware.
