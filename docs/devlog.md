@@ -301,3 +301,14 @@ Camera.py is cleaner and file-management logic is now isolated in VideoFileManag
 - Reduced CPU load by limiting how frequently histogram-based motion detection is executed.
 - Improved overall recording stability while maintaining reliable motion detection with the existing pre-buffer implementation.
 - Verified stable operation of 15 FPS recording with a 10-second RAM buffer and catch-up frame buffering enabled.
+
+## 2026-06-23
+- Refactored motion detection to use a dedicated low-resolution grayscale analysis frame instead of the full video frame.
+- Added create_motion_frame() helper to generate motion-analysis images from the current camera frame.
+- Converted motion detection background buffer (_extra_fb) to grayscale and separated it from the video recording pipeline.
+- Updated detect_motion() and get_motion_diff() to operate on reduced-resolution grayscale frames.
+- Updated background image initialization to use the motion-analysis frame format.
+- Restored frame copies in the circular buffer after discovering that storing references prevented preservation of historical frames.
+- Investigated memory consumption of VGA buffering and determined that VGA + 15 FPS exceeds available memory when storing independent frame copies.
+- Reconfigured buffer settings for stable operation at 640x480 resolution using a 5-second buffer at 5 FPS.
+- Verified successful pre-buffer recording and motion-triggered video capture using VGA resolution with the new buffer configuration.

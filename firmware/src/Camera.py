@@ -15,8 +15,10 @@ class Camera:
         self.csi0 = csi.CSI() # Initialize the OpenMV N6 CSI camera interface
         self.csi0.reset() # Reset and initialize the sensor
         self.csi0.pixformat(csi.RGB565) # Set pixel format to RGB565 (or GRAYSCALE)
-        self.csi0.framesize(csi.QVGA) # Set frame size to QVGA (320x240)
-        self.csi0.snapshot(time=2000) # Wait for settings take effect
+        #self.csi0.framesize(csi.QVGA) # Set frame size to QVGA (320x240)
+        self.csi0.framesize(csi.VGA) # Set frame size to VGA (640x480)
+        #self.csi0.snapshot(time=2000) # Wait for settings take effect
+        self._current_frame = self.csi0.snapshot(time=2000) # Wait for settings take effect
         self.csi0.auto_whitebal(False) # Turn off white balance
 
         self._led = machine.LED("LED_RED") # Status LED is used to indicate active recording
@@ -52,8 +54,10 @@ class Camera:
         # Load motion detection thresholds and timing settings
         self._motion_config = MotionConfig()
 
-        # Create a second frame buffer on the heap
-        self._extra_fb = image.Image(self.csi0.width(), self.csi0.height(), self.csi0.pixformat())
+
+        self._motion_width = 320
+        self._motion_height = 240
+        self._extra_fb = image.Image(self._motion_width, self._motion_height, csi.GRAYSCALE)
 
         self.save_bg_img(2000)
 
@@ -71,8 +75,10 @@ class Camera:
 
         self._last_motion_check_time = time.ticks_ms()
 
-    def detect_motion(self, img):
+    def detect_motion(self):
+        img = self.create_motion_frame(self._current_frame)
         self._frame_count += 1
+
         if self._frame_count > self._motion_config.bg_upd_frames():
             self._frame_count = 0
             # Blend in new frame
@@ -131,7 +137,7 @@ class Camera:
                 # Periodically check whether motion is still present
                 if time.ticks_diff(now, last_motion_check) >= self._motion_config.rec_chk_int_ms():
                     last_motion_check = now
-                    diff = self.get_motion_diff(img.copy())
+                    diff = self.get_motion_diff(img)
 
                     if diff <= self._motion_config.trig_thresh():
                         break
@@ -177,7 +183,7 @@ class Camera:
                 # Periodically check whether motion is still present
                 if time.ticks_diff(now, last_motion_check) >= self._motion_config.rec_chk_int_ms():
                     last_motion_check = now
-                    diff = self.get_motion_diff(img.copy())
+                    diff = self.get_motion_diff(img)
 
                     if diff <= self._motion_config.trig_thresh():
                         break
@@ -236,8 +242,8 @@ class Camera:
             now = time.ticks_ms()
 
             if time.ticks_diff(now, last_live_frame_time) >= self._frame_interval_ms:
-                img = self.csi0.snapshot()
-                catchup_frames.append(img.copy())
+                self._current_frame = self.csi0.snapshot()
+                catchup_frames.append(self._current_frame.copy())
                 last_live_frame_time = now
 
         # Write frames captured while the pre-buffer was being written
@@ -247,7 +253,8 @@ class Camera:
 
         return saved_frames
 
-    def get_motion_diff(self, img):
+    def get_motion_diff(self, frame):
+        img = self.create_motion_frame(frame)
         # Compare the current frame against the background image
         img.difference(self._extra_fb)
 
@@ -257,13 +264,14 @@ class Camera:
 
         return diff
 
-    def update_frame_buffer(self, frame):
+    def update_frame_buffer(self):
         now = time.ticks_ms()
 
         interval_ms = 1000 // self._buf_config.buf_fps()
 
         if time.ticks_diff(now, self._last_frame_time) >= interval_ms:
-            self.save_frame(frame.copy())
+            self._current_frame = self.csi0.snapshot()
+            self.save_frame(self._current_frame.copy())
             self._last_frame_time = now
 
     def save_frame(self, frame):
@@ -329,8 +337,17 @@ class Camera:
     def save_bg_img(self, time_ms):
         print("About to save background image...")
         self.csi0.snapshot(time=time_ms) # Give the user time to get ready
-        self._extra_fb.draw_image(self.csi0.snapshot())
+        self._extra_fb.draw_image(self.create_motion_frame(self.csi0.snapshot()))
         print("Saved background image - Now frame differencing!")
+
+    def create_motion_frame(self, frame):
+        img = frame.copy(
+            x_scale=self._motion_width / frame.width(),
+            y_scale=self._motion_height / frame.height()
+        )
+
+        img.to_grayscale()
+        return img
 
     def cleanup_memory(self):
         gc.collect()

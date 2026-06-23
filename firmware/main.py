@@ -9,11 +9,9 @@ print("memory after Camera has been constructed:", gc.mem_free())
 last_save_time = time.ticks_ms()
 
 while True:
-    img = camera.csi0.snapshot()
-
-    camera.update_frame_buffer(img)
+    camera.update_frame_buffer()
 
     if camera.should_check_motion():
-        if camera.detect_motion(img):
+        if camera.detect_motion():
             print("motion detected")
             camera.record_video_with_prebuffer()

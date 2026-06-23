@@ -1,9 +1,9 @@
 class BufferConfig:
     def __init__(self):
         # How many seconds of pre-motion frames should be kept in RAM
-        self._buf_sec = 10
+        self._buf_sec = 5 # 10
         # How many frames per second are stored into the RAM buffer
-        self._buf_fps = 15 # 15 tested and works
+        self._buf_fps = 5 # 15 tested and works
         # Total number of frames stored in the circular buffer
         # Example: 10 seconds * 2 FPS = 20 buffered frames
         self._buf_size = self._buf_sec * self._buf_fps
