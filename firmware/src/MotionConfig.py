@@ -3,7 +3,7 @@ class MotionConfig:
         self._trig_thresh = 5  # Motion detection threshold
         self._bg_upd_frames = 50  # Frames between background updates
         self._bg_upd_blend = 128  # Background blend factor (0-255)
-        self._chk_mot_ms = 10
+        self._chk_mot_ms = 200 # 200 = 5 times per second
         self._rec_chk_int_ms = 3000  # Motion recheck interval during recording (ms)
         self._post_rec_cd_ms = 1000  # Cooldown after recording stops (ms)
         self._main_loop_cd_ms = 1000  # Main loop delay (ms)

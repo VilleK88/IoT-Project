@@ -294,3 +294,10 @@ Camera.py is cleaner and file-management logic is now isolated in VideoFileManag
 - Moved video creation logic into a reusable helper function to reduce duplication between recording methods.
 - Continued refactoring of Camera class recording functionality into smaller reusable helper methods.
 - Verified that catch-up frame buffering works correctly on OpenMV N6 hardware.
+
+## 2026-06-23
+- Restored should_check_motion() gating in the main loop to avoid running motion detection on every frame.
+- Increased motion detection check interval from 10 ms to 200 ms.
+- Reduced CPU load by limiting how frequently histogram-based motion detection is executed.
+- Improved overall recording stability while maintaining reliable motion detection with the existing pre-buffer implementation.
+- Verified stable operation of 15 FPS recording with a 10-second RAM buffer and catch-up frame buffering enabled.
