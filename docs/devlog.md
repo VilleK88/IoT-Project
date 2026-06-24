@@ -312,3 +312,43 @@ Camera.py is cleaner and file-management logic is now isolated in VideoFileManag
 - Investigated memory consumption of VGA buffering and determined that VGA + 15 FPS exceeds available memory when storing independent frame copies.
 - Reconfigured buffer settings for stable operation at 640x480 resolution using a 5-second buffer at 5 FPS.
 - Verified successful pre-buffer recording and motion-triggered video capture using VGA resolution with the new buffer configuration.
+
+## 2026-06-24
+### RAM usage calculations for frame buffering
+
+Calculated estimated RAM usage for storing raw frames in the prebuffer.
+
+RGB565 uses 2 bytes per pixel:
+
+- 160x120 (QQVGA): 38,400 bytes = 37.5 KiB
+- 320x240 (QVGA): 153,600 bytes = 150 KiB
+- 640x480 (VGA): 614,400 bytes = 600 KiB
+
+Estimated 10-second RGB565 buffer usage:
+
+| Resolution | 5 FPS | 10 FPS | 15 FPS |
+|---|---:|---:|---:|
+| 160x120 QQVGA | 1.83 MiB | 3.66 MiB | 5.49 MiB |
+| 320x240 QVGA | 7.32 MiB | 14.65 MiB | 21.97 MiB |
+| 640x480 VGA | 29.30 MiB | 58.59 MiB | 87.89 MiB |
+
+Grayscale uses 1 byte per pixel, so it requires half the RAM of RGB565.
+
+160x120 grayscale:
+
+| FPS | 10-second buffer |
+|---:|---:|
+| 5 FPS | 0.92 MiB |
+| 10 FPS | 1.83 MiB |
+| 15 FPS | 2.75 MiB |
+
+Combined motion detection + recording buffer examples:
+
+| Motion detection buffer | Recording buffer | Total |
+|---|---:|---:|
+| 160x120 grayscale, 5 FPS, 10 s + 320x240 RGB565, 5 FPS, 10 s | 0.92 + 7.32 MiB | 8.24 MiB |
+| 160x120 grayscale, 5 FPS, 10 s + 640x480 RGB565, 5 FPS, 10 s | 0.92 + 29.30 MiB | 30.21 MiB |
+| 160x120 grayscale, 5 FPS, 10 s + 320x240 RGB565, 10 FPS, 10 s | 0.92 + 14.65 MiB | 15.56 MiB |
+| 160x120 grayscale, 5 FPS, 10 s + 640x480 RGB565, 10 FPS, 10 s | 0.92 + 58.59 MiB | 59.51 MiB |
+
+Based on these estimates, VGA RGB565 at 5 FPS for a 10-second prebuffer would require about 29.30 MiB, which should theoretically fit into 64 MiB SDRAM with enough headroom. VGA RGB565 at 10 FPS would require about 58.59 MiB, leaving very little memory for runtime overhead, MicroPython objects, frame buffers, and motion detection.
