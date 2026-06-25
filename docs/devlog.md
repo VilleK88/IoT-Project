@@ -407,3 +407,14 @@ Based on these estimates, VGA RGB565 at 5 FPS for a 10-second prebuffer would re
 1280x800 @ 5 FPS  =  97.66 MiB
 1280x800 @ 10 FPS = 195.31 MiB
 1280x800 @ 15 FPS = 292.97 MiB
+
+## 2026-06-25
+### PAG7936 buffer resolution limitations
+
+- Investigated the OpenMV PAG7936 firmware driver and confirmed that it supports three native frame buffer resolutions:
+  - `csi.QVGA` = 320×200
+  - `csi.VGA` = 640×400
+  - `csi.HD` = 1280×800
+- Verified experimentally that a 5-second RGB565 RAM prebuffer at `csi.HD` (1280×800) exceeds the available MicroPython heap and results in memory exhaustion.
+- Confirmed that a 5-second RGB565 RAM prebuffer at `csi.VGA` (640×400) consumes approximately 12.21 MiB and operates reliably.
+- Concluded that 640×400 is the highest practical resolution for the current RAM-based circular buffer implementation while maintaining a 5-second prebuffer at 5 FPS.
