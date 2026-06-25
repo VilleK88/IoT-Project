@@ -352,3 +352,12 @@ Combined motion detection + recording buffer examples:
 | 160x120 grayscale, 5 FPS, 10 s + 640x480 RGB565, 10 FPS, 10 s | 0.92 + 58.59 MiB | 59.51 MiB |
 
 Based on these estimates, VGA RGB565 at 5 FPS for a 10-second prebuffer would require about 29.30 MiB, which should theoretically fit into 64 MiB SDRAM with enough headroom. VGA RGB565 at 10 FPS would require about 58.59 MiB, leaving very little memory for runtime overhead, MicroPython objects, frame buffers, and motion detection.
+
+## 2026-06-25
+### Memory usage analysis
+
+- Calculated theoretical RAM requirements for RGB565 and grayscale frame buffers at multiple resolutions and frame rates.
+- Measured MicroPython heap usage using `gc.mem_free()` and `gc.mem_alloc()` during camera initialization and buffer allocation.
+- Current implementation uses a 5-second VGA RGB565 circular buffer at 5 FPS (25 buffered frames).
+- Theoretical RAM usage for the current recording buffer is approximately 14.65 MiB, while the measured MicroPython heap usage increased by approximately 12.2 MiB after the circular buffer was filled.
+- Observed that the available MicroPython heap is approximately 24.4 MiB, indicating that the full 64 MiB SDRAM is not exposed as Python heap memory.

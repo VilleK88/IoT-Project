@@ -1,10 +1,10 @@
 from src.Camera import Camera
-import gc
 import time
+import omv
 
-print("memory at start:", gc.mem_free())
+print(dir(omv))
+
 camera = Camera()
-print("memory after Camera has been constructed:", gc.mem_free())
 
 last_save_time = time.ticks_ms()
 

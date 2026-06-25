@@ -12,13 +12,19 @@ import gc
 
 class Camera:
     def __init__(self):
+        self.print_memory_status("Before CSI init")
+
         self.csi0 = csi.CSI() # Initialize the OpenMV N6 CSI camera interface
         self.csi0.reset() # Reset and initialize the sensor
         self.csi0.pixformat(csi.RGB565) # Set pixel format to RGB565 (or GRAYSCALE)
-        #self.csi0.framesize(csi.QVGA) # Set frame size to QVGA (320x240)
         self.csi0.framesize(csi.VGA) # Set frame size to VGA (640x480)
-        #self.csi0.snapshot(time=2000) # Wait for settings take effect
+
+        self.print_memory_status("After CSI config")
+
         self._current_frame = self.csi0.snapshot(time=2000) # Wait for settings take effect
+
+        self.print_memory_status("After first VGA snapshot")
+
         self.csi0.auto_whitebal(False) # Turn off white balance
 
         self._led = machine.LED("LED_RED") # Status LED is used to indicate active recording
@@ -59,7 +65,11 @@ class Camera:
         self._motion_height = 240
         self._extra_fb = image.Image(self._motion_width, self._motion_height, csi.GRAYSCALE)
 
+        self.print_memory_status("After motion background buffer allocation")
+
         self.save_bg_img(2000)
+
+        self.print_memory_status("After background image capture")
 
         self._triggered = False
         self._frame_count = 0
@@ -67,6 +77,9 @@ class Camera:
         # Buffer settings
         self._buf_config = BufferConfig()
         self._buffer = [None] * self._buf_config.buf_size()
+
+        self.print_memory_status("After Python ring buffer list allocation")
+
         self._buf_index = 0
         self._last_frame_time = 0
         self._buf_start_time = time.ticks_ms()
@@ -157,7 +170,8 @@ class Camera:
         self._frame_count = 0
 
     def record_video_with_prebuffer(self):
-        print("start recording with prebuffer")
+        self.print_memory_status("Before recording with prebuffer")
+
         filename, video = self.create_motion_video()
         saved_frames = 0
         self.start_recording_state()
@@ -195,8 +209,6 @@ class Camera:
             video.close()
             self.stop_recording_state()
 
-        print("record_video done")
-
         duration_ms = saved_frames * self._frame_interval_ms
         self._file_manager.patch_mjpeg_timing(filename, saved_frames, duration_ms)
 
@@ -208,6 +220,8 @@ class Camera:
         time.sleep_ms(self._motion_config.post_rec_cd_ms())
 
         self._frame_count = 0
+
+        self.print_memory_status("After recording with prebuffer")
 
     def create_motion_video(self):
         filename = self._file_manager.build_filename(
@@ -277,6 +291,9 @@ class Camera:
     def save_frame(self, frame):
         self._buffer[self._buf_index] = frame
         self._buf_index = (self._buf_index + 1) % self._buf_config.buf_size()
+
+        if self._buf_index == 0:
+            self.print_memory_status("After ring buffer filled once")
 
     def save_buf_as_mjpeg(self):
         print("saving buffer")
@@ -351,3 +368,9 @@ class Camera:
 
     def cleanup_memory(self):
         gc.collect()
+
+    def print_memory_status(self, label):
+        self.cleanup_memory()
+        print(label)
+        print("Free:", gc.mem_free())
+        print("Allocated:", gc.mem_alloc())
