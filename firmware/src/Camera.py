@@ -285,6 +285,8 @@ class Camera:
 
         if time.ticks_diff(now, self._last_frame_time) >= interval_ms:
             self._current_frame = self.csi0.snapshot()
+            # Store a copy of the current frame in the circular buffer.
+            # VGA RGB565: ~600 KiB (0.586 MiB) RAM per buffered frame.
             self.save_frame(self._current_frame.copy())
             self._last_frame_time = now
 
