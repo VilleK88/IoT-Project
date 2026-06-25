@@ -1,9 +1,38 @@
-from src.StorageConfig import StorageConfig
 import os
 
-class VideoFileManager:
+class FileManager:
     def __init__(self, storage_config):
         self._storage_config = storage_config
+        self._vid_count = 0
+        self._img_count = 0
+        self._pre_buf_count = 0
+
+    def prepare_directories(self):
+        # Create directories if they don't already exist
+        self.create_directory(self._storage_config.vid_dir())
+        self.create_directory(self._storage_config.img_dir())
+        self.create_directory(self._storage_config.temp_dir())
+        self.create_directory(self._storage_config.pre_buf_dir())
+
+    def load_file_counters(self):
+        # Continue numbering from the highest existing file number
+        self._vid_count = self.get_next_file_num(
+            self._storage_config.vid_dir(),
+            self._storage_config.vid_prefix(),
+            self._storage_config.vid_suffix()
+        )
+
+        self._img_count = self.get_next_file_num(
+            self._storage_config.img_dir(),
+            self._storage_config.img_prefix(),
+            self._storage_config.img_suffix()
+        )
+
+        self._pre_buf_count = self.get_next_file_num(
+            self._storage_config.pre_buf_dir(),
+            self._storage_config.vid_prefix(),
+            self._storage_config.vid_suffix()
+        )
 
     def create_directory(self, path):
         try:
@@ -73,3 +102,21 @@ class VideoFileManager:
             print("Frames:", frames)
             print("Duration ms:", duration_ms)
             print("FPS:", (frames * 1000) // duration_ms)
+
+    def get_video_count(self):
+        return self._vid_count
+
+    def increase_video_count(self):
+        self._vid_count += 1
+
+    def get_img_count(self):
+        return self._img_count
+
+    def increase_img_count(self):
+        self._img_count += 1
+
+    def get_pre_buf_count(self):
+        return self._pre_buf_count
+
+    def increase_pre_buf_count(self):
+        self._pre_buf_count += 1

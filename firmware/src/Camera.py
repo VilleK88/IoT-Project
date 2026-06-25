@@ -1,7 +1,5 @@
 from src.MotionConfig import MotionConfig
-from src.StorageConfig import StorageConfig
 from src.BufferConfig import BufferConfig
-from src.VideoFileManager import VideoFileManager
 import mjpeg
 import csi
 import machine
@@ -11,82 +9,46 @@ import gc
 
 
 class Camera:
-    def __init__(self):
+    def __init__(self, storage_config, file_manager):
         self.print_memory_status("Before CSI init")
 
+        # External dependencies
+        self._storage_config = storage_config
+        self._file_manager = file_manager
+
+        # Camera setup
         self.csi0 = csi.CSI() # Initialize the OpenMV N6 CSI camera interface
         self.csi0.reset() # Reset and initialize the sensor
         self.csi0.pixformat(csi.RGB565) # Set pixel format to RGB565 (or GRAYSCALE)
         self.csi0.framesize(csi.VGA) # Set frame size to VGA (640x480)
-
         self.print_memory_status("After CSI config")
-
         self._current_frame = self.csi0.snapshot(time=2000) # Wait for settings take effect
-
         self.print_memory_status("After first VGA snapshot")
-
         self.csi0.auto_whitebal(False) # Turn off white balance
 
+        # Hardware indicators
         self._led = machine.LED("LED_RED") # Status LED is used to indicate active recording
 
-        self._storage_config = StorageConfig()
-        self._file_manager = VideoFileManager(self._storage_config)
-
-        # Create directories if they don't already exist
-        self._file_manager.create_directory(self._storage_config.vid_dir())
-        self._file_manager.create_directory(self._storage_config.img_dir())
-        self._file_manager.create_directory(self._storage_config.temp_dir())
-        self._file_manager.create_directory(self._storage_config.pre_buf_dir())
-
-        # Continue numbering from the highest existing file number
-        self._vid_count = self._file_manager.get_next_file_num(
-            self._storage_config.vid_dir(),
-            self._storage_config.vid_prefix(),
-            self._storage_config.vid_suffix()
-        )
-
-        self._img_count = self._file_manager.get_next_file_num(
-            self._storage_config.img_dir(),
-            self._storage_config.img_prefix(),
-            self._storage_config.img_suffix()
-        )
-
-        self._pre_buf_count = self._file_manager.get_next_file_num(
-            self._storage_config.pre_buf_dir(),
-            self._storage_config.vid_prefix(),
-            self._storage_config.vid_suffix()
-        )
-
-        # Load motion detection thresholds and timing settings
+        # Motion detection settings
         self._motion_config = MotionConfig()
-
-
         self._motion_width = 320
         self._motion_height = 240
         self._extra_fb = image.Image(self._motion_width, self._motion_height, csi.GRAYSCALE)
-
         self.print_memory_status("After motion background buffer allocation")
-
         self.save_bg_img(2000)
-
         self.print_memory_status("After background image capture")
-
         self._triggered = False
         self._frame_count = 0
+        self._last_motion_check_time = time.ticks_ms()
 
         # Buffer settings
         self._buf_config = BufferConfig()
         self._buffer = [None] * self._buf_config.buf_size()
-
         self.print_memory_status("After Python ring buffer list allocation")
-
         self._buf_index = 0
         self._last_frame_time = 0
         self._buf_start_time = time.ticks_ms()
-
-        self._frame_interval_ms = 1000 // self._buf_config.buf_fps()
-
-        self._last_motion_check_time = time.ticks_ms()
+        self._frame_interval_ms = self._buf_config.frame_interval_ms()
 
     def detect_motion(self):
         img = self.create_motion_frame(self._current_frame)
@@ -125,9 +87,9 @@ class Camera:
             self._storage_config.img_dir(),
             self._storage_config.img_prefix(),
             self._storage_config.img_suffix(),
-            self._img_count
+            self._file_manager.get_img_count()
         )
-        self._img_count += 1
+        self._file_manager.increase_img_count()
         img.save(filename)
         self.csi0.auto_whitebal(False)
 
@@ -228,9 +190,9 @@ class Camera:
             self._storage_config.vid_dir(),
             self._storage_config.vid_prefix(),
             self._storage_config.vid_suffix(),
-            self._vid_count
+            self._file_manager.get_video_count()
         )
-        self._vid_count += 1
+        self._file_manager.increase_video_count()
         print("Recording:", filename)
         return filename, mjpeg.Mjpeg(filename)
 
@@ -303,27 +265,22 @@ class Camera:
             self._storage_config.pre_buf_dir(),
             self._storage_config.vid_prefix(),
             self._storage_config.vid_suffix(),
-            self._pre_buf_count
+            self._file_manager.get_pre_buf_count()
         )
-        self._pre_buf_count += 1
-
-        #duration_ms = self._buf_config.buf_size() * (1000 // self._buf_config.buf_fps())
+        self._file_manager.increase_pre_buf_count()
 
         # Create a new MJPEG file on the SD card
         video = mjpeg.Mjpeg(filename)
-
         saved_frames = 0
 
         try:
             saved_frames = self.write_buf_to_video(video)
-
         finally:
             # Finish and close the MJPEG file
             video.close()
 
         duration_ms = saved_frames * (1000 // self._buf_config.buf_fps())
         self._file_manager.patch_mjpeg_timing(filename, saved_frames, duration_ms)
-
         print("buffer saved, frames:", saved_frames)
 
     def write_buf_to_video(self, video):

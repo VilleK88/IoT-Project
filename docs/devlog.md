@@ -361,3 +361,11 @@ Based on these estimates, VGA RGB565 at 5 FPS for a 10-second prebuffer would re
 - Current implementation uses a 5-second VGA RGB565 circular buffer at 5 FPS (25 buffered frames).
 - Theoretical RAM usage for the current recording buffer is approximately 14.65 MiB, while the measured MicroPython heap usage increased by approximately 12.2 MiB after the circular buffer was filled.
 - Observed that the available MicroPython heap is approximately 24.4 MiB, indicating that the full 64 MiB SDRAM is not exposed as Python heap memory.
+
+## 2026-06-25
+### Camera initialization refactoring
+
+- Refactored the `Camera` constructor into clearly separated initialization sections for dependencies, camera setup, hardware indicators, motion detection, and buffer configuration.
+- Moved `StorageConfig` and `FileManager` creation outside the `Camera` class and injected them through the constructor to reduce coupling.
+- Renamed `VideoFileManager` to `FileManager` to better reflect its broader responsibility for file and directory management.
+- Added descriptive memory profiling checkpoints during camera initialization to monitor MicroPython heap usage.
