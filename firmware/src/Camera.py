@@ -20,7 +20,9 @@ class Camera:
         self.csi0 = csi.CSI() # Initialize the OpenMV N6 CSI camera interface
         self.csi0.reset() # Reset and initialize the sensor
         self.csi0.pixformat(csi.RGB565) # Set pixel format to RGB565 (or GRAYSCALE)
-        self.csi0.framesize(csi.VGA) # Set frame size to VGA (640x480)
+        #self.csi0.framesize(csi.VGA) # Set frame size to VGA (640x480)
+        #self.csi0.framesize(csi.WXGA) # Set frame size to WXGA (1280x800)
+        self.csi0.framesize(csi.SVGA)
         self.print_memory_status("After CSI config")
         self._current_frame = self.csi0.snapshot(time=2000) # Wait for settings take effect
         self.print_memory_status("After first VGA snapshot")

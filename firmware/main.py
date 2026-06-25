@@ -2,6 +2,7 @@ from src.StorageConfig import StorageConfig
 from src.FileManager import FileManager
 from src.Camera import Camera
 import time
+#import csi
 
 storage_config = StorageConfig()
 file_manager = FileManager(storage_config)
@@ -9,6 +10,8 @@ file_manager.prepare_directories()
 file_manager.load_file_counters()
 
 camera = Camera(storage_config, file_manager)
+
+#print(dir(csi))
 
 last_save_time = time.ticks_ms()
 

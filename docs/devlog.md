@@ -369,3 +369,41 @@ Based on these estimates, VGA RGB565 at 5 FPS for a 10-second prebuffer would re
 - Moved `StorageConfig` and `FileManager` creation outside the `Camera` class and injected them through the constructor to reduce coupling.
 - Renamed `VideoFileManager` to `FileManager` to better reflect its broader responsibility for file and directory management.
 - Added descriptive memory profiling checkpoints during camera initialization to monitor MicroPython heap usage.
+
+## 2026-06-25
+### Corrected PAG7936 memory calculations
+
+- Verified from the OpenMV PAG7936 driver that the sensor uses custom resolution mappings:
+  - `csi.QVGA` = 320x200
+  - `csi.VGA` = 640x400
+  - `csi.HD` = 1280x800
+- Updated RGB565 frame buffer RAM calculations to match the actual PAG7936 resolutions.
+- Confirmed that the current 5-second `csi.VGA` RGB565 buffer at 5 FPS uses approximately 12.21 MiB, matching measured MicroPython heap usage.
+
+5-second RGB565 buffer:
+
+```text
+320x200 @ 5 FPS  =  3.05 MiB
+320x200 @ 10 FPS =  6.10 MiB
+320x200 @ 15 FPS =  9.16 MiB
+
+640x400 @ 5 FPS  = 12.21 MiB
+640x400 @ 10 FPS = 24.41 MiB
+640x400 @ 15 FPS = 36.62 MiB
+
+1280x800 @ 5 FPS  =  48.83 MiB
+1280x800 @ 10 FPS =  97.66 MiB
+1280x800 @ 15 FPS = 146.48 MiB
+
+## 2026-06-25
+320x200 @ 5 FPS  =  6.10 MiB
+320x200 @ 10 FPS = 12.21 MiB
+320x200 @ 15 FPS = 18.31 MiB
+
+640x400 @ 5 FPS  = 24.41 MiB
+640x400 @ 10 FPS = 48.83 MiB
+640x400 @ 15 FPS = 73.24 MiB
+
+1280x800 @ 5 FPS  =  97.66 MiB
+1280x800 @ 10 FPS = 195.31 MiB
+1280x800 @ 15 FPS = 292.97 MiB
