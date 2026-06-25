@@ -16,17 +16,16 @@ class Camera:
         self._storage_config = storage_config
         self._file_manager = file_manager
 
-        # Camera setup
-        self.csi0 = csi.CSI() # Initialize the OpenMV N6 CSI camera interface
-        self.csi0.reset() # Reset and initialize the sensor
-        self.csi0.pixformat(csi.RGB565) # Set pixel format to RGB565 (or GRAYSCALE)
-        #self.csi0.framesize(csi.VGA) # Set frame size to VGA (640x480)
-        #self.csi0.framesize(csi.WXGA) # Set frame size to WXGA (1280x800)
-        self.csi0.framesize(csi.SVGA)
-        self.print_memory_status("After CSI config")
-        self._current_frame = self.csi0.snapshot(time=2000) # Wait for settings take effect
-        self.print_memory_status("After first VGA snapshot")
-        self.csi0.auto_whitebal(False) # Turn off white balance
+        # CSI camera handles
+        self.csi0 = None  # PAG7936 RGB camera
+        self.csi1 = None  # Lepton thermal camera
+
+        # Thermal detection settings
+        self._threshold_list = [(170, 255)]
+        self._min_temp_in_celsius = 15.0
+        self._max_temp_in_celsius = 40.0
+        self._therm_detect_counter = 0
+        self._last_hot_img = None
 
         # Hardware indicators
         self._led = machine.LED("LED_RED") # Status LED is used to indicate active recording
@@ -35,10 +34,6 @@ class Camera:
         self._motion_config = MotionConfig()
         self._motion_width = 320
         self._motion_height = 240
-        self._extra_fb = image.Image(self._motion_width, self._motion_height, csi.GRAYSCALE)
-        self.print_memory_status("After motion background buffer allocation")
-        self.save_bg_img(2000)
-        self.print_memory_status("After background image capture")
         self._triggered = False
         self._frame_count = 0
         self._last_motion_check_time = time.ticks_ms()
@@ -46,11 +41,31 @@ class Camera:
         # Buffer settings
         self._buf_config = BufferConfig()
         self._buffer = [None] * self._buf_config.buf_size()
-        self.print_memory_status("After Python ring buffer list allocation")
         self._buf_index = 0
         self._last_frame_time = 0
         self._buf_start_time = time.ticks_ms()
         self._frame_interval_ms = self._buf_config.frame_interval_ms()
+
+        # Initialize the OpenMV N6 PAG7936 CSI camera interface
+        self.init_camera()
+
+        self._current_frame = self.csi0.snapshot(time=2000)
+        self.print_memory_status("After first VGA snapshot")
+
+        self._clock = time.clock()
+        self.csi0.auto_whitebal(False)
+
+        # Motion background buffer
+        self._extra_fb = image.Image(self._motion_width, self._motion_height, csi.GRAYSCALE)
+        self.print_memory_status("After motion background buffer allocation")
+
+        self.save_bg_img(2000)
+        self.print_memory_status("After background image capture")
+
+        self.print_memory_status("After Python ring buffer list allocation")
+
+        # Initialize the OpenMV N6 Lepton CSI camera interface
+        #self.init_thermal_camera()
 
     def detect_motion(self):
         img = self.create_motion_frame(self._current_frame)
@@ -250,7 +265,7 @@ class Camera:
         if time.ticks_diff(now, self._last_frame_time) >= interval_ms:
             self._current_frame = self.csi0.snapshot()
             # Store a copy of the current frame in the circular buffer.
-            # VGA RGB565: ~600 KiB (0.586 MiB) RAM per buffered frame.
+            # PAG7936 csi.VGA RGB565: ~500 KiB (0.488 MiB) RAM per buffered frame.
             self.save_frame(self._current_frame.copy())
             self._last_frame_time = now
 
@@ -326,6 +341,64 @@ class Camera:
 
         img.to_grayscale()
         return img
+
+    def map_g_to_temp(self, g):
+        return ((g * (self._max_temp_in_celsius - self._min_temp_in_celsius)) / 255.0) + self._min_temp_in_celsius
+
+    def thermal_camera(self):
+        img = self.csi1.snapshot()
+
+        stats = img.get_statistics()
+        max_temp = self.map_g_to_temp(stats.max())
+        mean_temp = self.map_g_to_temp(stats.mean())
+
+        if max_temp - mean_temp > 3.0:
+            print("warm target detected", self._therm_detect_counter)
+
+            hot_img = img.copy()
+            hot_img.binary(self._threshold_list)
+
+            if self._last_hot_img is not None:
+                diff_img = hot_img.copy()
+                diff_img.difference(self._last_hot_img)
+
+                diff_stats = diff_img.get_statistics()
+
+                if diff_stats.max() > 0:
+                    print("warm target moving", self._therm_detect_counter)
+
+            self._therm_detect_counter += 1
+            self._last_hot_img = hot_img
+        else:
+            self._last_hot_img = None
+
+    def init_camera(self):
+        # PAG7936 camera setup
+        self.csi0 = csi.CSI()
+        self.csi0.reset() # Reset and initialize the sensor
+        self.csi0.pixformat(csi.RGB565) # Set pixel format to RGB565 (or GRAYSCALE)
+        self.csi0.framesize(csi.VGA) # PAG7936 csi.VGA = 640x400
+        self.print_memory_status("After PAG7936 CSI config")
+
+    def init_thermal_camera(self):
+        # Lepton thermal camera setup
+        self.csi1 = csi.CSI(cid=csi.LEPTON)
+        self.csi1.reset()  # Reset and initialize the sensor
+        self.csi1.pixformat(csi.GRAYSCALE)  # Set pixel format to RGB565 (or GRAYSCALE)
+        self.csi1.framesize(csi.QQVGA)  # Set frame size to QQVGA (160×120)
+        self.print_memory_status("After Lepton CSI config")
+
+        self.csi1.snapshot(time=5000)
+
+        # Enable measurement mode
+        self.csi1.ioctl(csi.IOCTL_LEPTON_SET_MODE, True, True)
+        self.csi1.ioctl(csi.IOCTL_LEPTON_SET_RANGE, self._min_temp_in_celsius, self._max_temp_in_celsius)
+
+    def deinit_thermal_camera(self):
+        if self.csi1 is not None:
+            self.csi1.sleep(True)
+            self.csi1 = None
+            self.cleanup_memory()
 
     def cleanup_memory(self):
         gc.collect()

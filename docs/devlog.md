@@ -418,3 +418,29 @@ Based on these estimates, VGA RGB565 at 5 FPS for a 10-second prebuffer would re
 - Verified experimentally that a 5-second RGB565 RAM prebuffer at `csi.HD` (1280×800) exceeds the available MicroPython heap and results in memory exhaustion.
 - Confirmed that a 5-second RGB565 RAM prebuffer at `csi.VGA` (640×400) consumes approximately 12.21 MiB and operates reliably.
 - Concluded that 640×400 is the highest practical resolution for the current RAM-based circular buffer implementation while maintaining a 5-second prebuffer at 5 FPS.
+
+## 2026-06-25
+### FLIR Lepton thermal camera integration
+
+- Integrated the OpenMV Multispectral Thermal Camera Module (FLIR Lepton) into the project.
+- Investigated OpenMV's thermal camera examples and documentation, identifying several outdated or incorrect example snippets.
+- Determined that the Lepton camera must be initialized using `csi.CSI(cid=csi.LEPTON)` instead of the default CSI constructor.
+- Implemented thermal camera initialization, radiometric measurement mode and configurable temperature range.
+- Added grayscale-to-temperature conversion for displaying approximate object temperatures.
+- Implemented warm target detection based on thermal image statistics.
+- Implemented movement detection for warm targets by comparing consecutive thresholded thermal frames.
+- Verified successful detection of human body heat and movement using the thermal camera.
+
+### Camera architecture refactoring
+
+- Refactored camera initialization into dedicated methods for the RGB and thermal cameras.
+- Added separate initialization and deinitialization functions for the FLIR Lepton camera.
+- Prepared the architecture for switching between RGB and thermal cameras without keeping both initialized simultaneously.
+- Simplified the `Camera` constructor by grouping related initialization code.
+- Updated camera comments and documentation to match the actual PAG7936 VGA resolution (640×400).
+
+### Investigation
+
+- Investigated simultaneous operation of the PAG7936 RGB camera and FLIR Lepton thermal camera.
+- Observed that initializing the Lepton camera prevents successful RGB frame capture, suggesting a firmware or CSI driver limitation.
+- Began restructuring the camera subsystem to support explicit camera activation and deactivation.
