@@ -44,6 +44,8 @@ class Camera:
         self._buf_index = 0
         self._last_frame_time = 0
         self._buf_start_time = time.ticks_ms()
+
+
         self._frame_interval_ms = self._buf_config.frame_interval_ms()
 
         # Initialize the OpenMV N6 PAG7936 CSI camera interface
@@ -157,14 +159,14 @@ class Camera:
 
         try:
             saved_frames = self.write_prebuffer_with_catchup(video)
-
+            self.csi0.framesize(csi.HD)  # PAG7936 csi.HD = 1280x800
             last_live_frame_time = time.ticks_ms()
             last_motion_check = time.ticks_ms()
 
             while True:
                 now = time.ticks_ms()
 
-                if time.ticks_diff(now, last_live_frame_time) < self._frame_interval_ms:
+                if time.ticks_diff(now, last_live_frame_time) < self._buf_config.frame_interval_ms():
                     continue
 
                 last_live_frame_time = now
@@ -188,21 +190,21 @@ class Camera:
             video.close()
             self.stop_recording_state()
 
-        duration_ms = saved_frames * self._frame_interval_ms
+        duration_ms = saved_frames * self._buf_config.frame_interval_ms()
         self._file_manager.patch_mjpeg_timing(filename, saved_frames, duration_ms)
 
         print("record_video_with_prebuffer done")
         print("Saved frames:", saved_frames)
         print("Duration ms:", duration_ms)
 
+        self.csi0.framesize(csi.VGA)  # PAG7936 csi.VGA = 640x400
         # Short cooldown helps prevent immediate repeated recordings
         time.sleep_ms(self._motion_config.post_rec_cd_ms())
 
         self._frame_count = 0
-
         self.print_memory_status("After recording with prebuffer")
 
-    def create_motion_video(self):
+    def create_motion_video(self, width=1280, height=800):
         filename = self._file_manager.build_filename(
             self._storage_config.vid_dir(),
             self._storage_config.vid_prefix(),
@@ -211,7 +213,7 @@ class Camera:
         )
         self._file_manager.increase_video_count()
         print("Recording:", filename)
-        return filename, mjpeg.Mjpeg(filename)
+        return filename, mjpeg.Mjpeg(filename, width=width, height=height)
 
     def start_recording_state(self):
         self._led.on()
@@ -229,7 +231,8 @@ class Camera:
 
         # Write pre-buffer while also sampling new frames during the blocking write
         for frame in prebuf_frames:
-            video.write(frame)
+            #video.write(frame)
+            video.write(frame, width=1280, height=800)
             saved_frames += 1
 
             now = time.ticks_ms()
@@ -241,7 +244,8 @@ class Camera:
 
         # Write frames captured while the pre-buffer was being written
         for frame in catchup_frames:
-            video.write(frame)
+            #video.write(frame)
+            video.write(frame, width=1280, height=800)
             saved_frames += 1
 
         return saved_frames
@@ -310,7 +314,8 @@ class Camera:
 
             # Skip empty slots if the buffer is not full yet
             if frame is not None:
-                video.write(frame)
+                #video.write(frame)
+                video.write(frame, width=1280, height=800)
                 saved_frames += 1
 
         return saved_frames

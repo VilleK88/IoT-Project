@@ -444,3 +444,21 @@ Based on these estimates, VGA RGB565 at 5 FPS for a 10-second prebuffer would re
 - Investigated simultaneous operation of the PAG7936 RGB camera and FLIR Lepton thermal camera.
 - Observed that initializing the Lepton camera prevents successful RGB frame capture, suggesting a firmware or CSI driver limitation.
 - Began restructuring the camera subsystem to support explicit camera activation and deactivation.
+
+## 2026-07-01
+### OpenMV Firmware Development
+
+- Set up a local OpenMV firmware development environment using Docker on Windows.
+- Built the OpenMV firmware locally after resolving multiple build environment issues.
+- Fixed Windows CRLF/LF line-ending incompatibilities in the OpenMV build scripts.
+- Initialized all required Git submodules.
+- Installed the OpenMV SDK inside the Docker build environment.
+- Configured a reusable Docker SDK volume to avoid downloading the SDK for every build.
+- Investigated the OpenMV MJPEG implementation to support higher-quality motion recording.
+- Evaluated different approaches for combining a low-resolution RAM prebuffer with higher-resolution recording.
+- Verified the supported PAG7936 camera resolutions:
+  - VGA (640×400)
+  - HD (1280×800)
+  - Confirmed that FHD is not supported by the current CSI driver.
+- Started implementing custom firmware changes in `modules/py_mjpeg.c` to automatically scale buffered VGA frames to the target recording resolution during MJPEG encoding.
+- Began testing a custom firmware build containing the MJPEG scaling modifications.

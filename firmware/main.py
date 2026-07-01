@@ -1,7 +1,6 @@
 from src.StorageConfig import StorageConfig
 from src.FileManager import FileManager
 from src.Camera import Camera
-import time
 
 storage_config = StorageConfig()
 file_manager = FileManager(storage_config)
