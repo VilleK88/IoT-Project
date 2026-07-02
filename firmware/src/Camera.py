@@ -31,9 +31,7 @@ class Camera:
         self._led = machine.LED("LED_RED") # Status LED is used to indicate active recording
 
         # Motion detection settings
-        self._motion_config = MotionConfig()
-        self._motion_width = 320
-        self._motion_height = 240
+        self._mot_conf = MotionConfig()
         self._triggered = False
         self._frame_count = 0
         self._last_motion_check_time = time.ticks_ms()
@@ -56,7 +54,7 @@ class Camera:
         self.csi0.auto_whitebal(False)
 
         # Motion background buffer
-        self._extra_fb = image.Image(self._motion_width, self._motion_height, csi.GRAYSCALE)
+        self._extra_fb = image.Image(self._mot_conf.motion_width(), self._mot_conf.motion_height(), csi.GRAYSCALE)
         self.print_memory_status("After motion background buffer allocation")
 
         self.save_bg_img()
@@ -71,10 +69,10 @@ class Camera:
         img = self.create_motion_frame(self._current_frame)
         self._frame_count += 1
 
-        if self._frame_count > self._motion_config.bg_upd_frames():
+        if self._frame_count > self._mot_conf.bg_upd_frames():
             self._frame_count = 0
             # Blend in new frame
-            img.blend(self._extra_fb, alpha=(255 - self._motion_config.bg_upd_blend()))
+            img.blend(self._extra_fb, alpha=(255 - self._mot_conf.bg_upd_blend()))
             self._extra_fb.draw_image(img)
 
         # Replace the image with the "abs(NEW_OLD)" frame difference
@@ -84,13 +82,13 @@ class Camera:
         diff = hist.get_percentile(0.99).l_value() - hist.get_percentile(0.90).l_value()
 
         # Motion is detected when the difference exceeds the configured threshold
-        self._triggered = diff > self._motion_config.trig_thresh()
+        self._triggered = diff > self._mot_conf.trig_thresh()
 
         return self._triggered
 
     def should_check_motion(self):
         now = time.ticks_ms()
-        if time.ticks_diff(now, self._last_motion_check_time) >= self._motion_config.chk_mot_ms():
+        if time.ticks_diff(now, self._last_motion_check_time) >= self._mot_conf.chk_mot_ms():
             self._last_motion_check_time = now
             return True
         return False
@@ -127,11 +125,11 @@ class Camera:
                 now = time.ticks_ms()
 
                 # Periodically check whether motion is still present
-                if time.ticks_diff(now, last_motion_check) >= self._motion_config.rec_chk_int_ms():
+                if time.ticks_diff(now, last_motion_check) >= self._mot_conf.rec_chk_int_ms():
                     last_motion_check = now
                     diff = self.get_motion_diff(img)
 
-                    if diff <= self._motion_config.trig_thresh():
+                    if diff <= self._mot_conf.trig_thresh():
                         break
                     else:
                         print("Motion detected while recording")
@@ -144,7 +142,7 @@ class Camera:
         print("record_video done")
 
         # Short cooldown helps prevent immediate repeated recordings
-        time.sleep_ms(self._motion_config.post_rec_cd_ms())
+        time.sleep_ms(self._mot_conf.post_rec_cd_ms())
 
         self._frame_count = 0
 
@@ -174,11 +172,11 @@ class Camera:
                 saved_frames += 1
 
                 # Periodically check whether motion is still present
-                if time.ticks_diff(now, last_motion_check) >= self._motion_config.rec_chk_int_ms():
+                if time.ticks_diff(now, last_motion_check) >= self._mot_conf.rec_chk_int_ms():
                     last_motion_check = now
                     diff = self.get_motion_diff(img)
 
-                    if diff <= self._motion_config.trig_thresh():
+                    if diff <= self._mot_conf.trig_thresh():
                         break
                     else:
                         print("Motion detected while recording")
@@ -197,7 +195,7 @@ class Camera:
 
         self.csi0.framesize(csi.VGA)
         # Short cooldown helps prevent immediate repeated recordings
-        time.sleep_ms(self._motion_config.post_rec_cd_ms())
+        time.sleep_ms(self._mot_conf.post_rec_cd_ms())
 
         self._frame_count = 0
 
@@ -337,8 +335,8 @@ class Camera:
 
     def create_motion_frame(self, frame):
         img = frame.copy(
-            x_scale=self._motion_width / frame.width(),
-            y_scale=self._motion_height / frame.height()
+            x_scale=self._mot_conf.motion_width() / frame.width(),
+            y_scale=self._mot_conf.motion_height() / frame.height()
         )
 
         img.to_grayscale()

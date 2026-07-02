@@ -1,6 +1,8 @@
 class MotionConfig:
     def __init__(self):
         self._trig_thresh = 10  # Motion detection threshold 5
+        self._motion_width = 320
+        self._motion_height = 240
         self._bg_upd_frames = 50  # Frames between background updates
         self._bg_upd_blend = 128  # Background blend factor (0-255)
         self._chk_mot_ms = 200 # 200 = 5 times per second
@@ -16,6 +18,12 @@ class MotionConfig:
 
     def trig_thresh(self):
         return self._trig_thresh
+
+    def motion_width(self):
+        return self._motion_width
+
+    def motion_height(self):
+        return self._motion_height
 
     def bg_upd_frames(self):
         return self._bg_upd_frames
