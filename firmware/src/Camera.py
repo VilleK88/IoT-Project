@@ -45,13 +45,8 @@ class Camera:
         self._frame_interval_ms = self._buf_config.frame_interval_ms()
 
         # Initialize the OpenMV N6 PAG7936 CSI camera interface
-        self.init_camera()
-
-        self._current_frame = self.csi0.snapshot(time=2000)
-        self.print_memory_status("After first VGA snapshot")
-
-        self._clock = time.clock()
-        self.csi0.auto_whitebal(False)
+        self._current_frame = self.init_camera()
+        #self._current_frame = None
 
         # Motion background buffer
         self._extra_fb = image.Image(self._mot_conf.motion_width(), self._mot_conf.motion_height(), csi.GRAYSCALE)
@@ -328,7 +323,7 @@ class Camera:
 
     def save_bg_img(self):
         print("About to save background image...")
-        self.csi0.snapshot(time=2000) # Give the user time to get ready
+        self.csi0.snapshot(time=2000)  # Give the user time to get ready
         print("Gave the user time to get ready snapshot...")
         self._extra_fb.draw_image(self.create_motion_frame(self.csi0.snapshot()))
         print("Saved background image - Now frame differencing!")
@@ -378,7 +373,10 @@ class Camera:
         self.csi0.reset() # Reset and initialize the sensor
         self.csi0.pixformat(csi.RGB565) # Set pixel format to RGB565 (or GRAYSCALE)
         self.csi0.framesize(csi.VGA) # PAG7936 csi.VGA = 640x400
-        self.print_memory_status("After PAG7936 CSI config")
+        img = self.csi0.snapshot(time=2000)
+        self.csi0.auto_whitebal(False)
+        self.print_memory_status("After PAG7936 CSI config and first VGA snapshot")
+        return img
 
     def init_thermal_camera(self):
         # Lepton thermal camera setup
