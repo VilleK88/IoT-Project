@@ -59,7 +59,7 @@ class Camera:
         self._extra_fb = image.Image(self._motion_width, self._motion_height, csi.GRAYSCALE)
         self.print_memory_status("After motion background buffer allocation")
 
-        self.save_bg_img(2000)
+        self.save_bg_img()
         self.print_memory_status("After background image capture")
 
         self.print_memory_status("After Python ring buffer list allocation")
@@ -327,9 +327,10 @@ class Camera:
 
         return frames
 
-    def save_bg_img(self, time_ms):
+    def save_bg_img(self):
         print("About to save background image...")
-        self.csi0.snapshot(time=time_ms) # Give the user time to get ready
+        #self.csi0.snapshot(time=2000) # Give the user time to get ready
+        #print("Gave the user time to get ready snapshot...")
         self._extra_fb.draw_image(self.create_motion_frame(self.csi0.snapshot()))
         print("Saved background image - Now frame differencing!")
 

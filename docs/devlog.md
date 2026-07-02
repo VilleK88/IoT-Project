@@ -444,3 +444,9 @@ Based on these estimates, VGA RGB565 at 5 FPS for a 10-second prebuffer would re
 - Investigated simultaneous operation of the PAG7936 RGB camera and FLIR Lepton thermal camera.
 - Observed that initializing the Lepton camera prevents successful RGB frame capture, suggesting a firmware or CSI driver limitation.
 - Began restructuring the camera subsystem to support explicit camera activation and deactivation.
+
+## 2026-07-02
+- Recovered the OpenMV N6 firmware by flashing firmware version 4.8.1 using the SingTown VS Code extension.
+- Verified that the existing Python camera code works again after restoring a stable firmware version.
+- Identified that the crash was firmware-related, not caused by the existing `Camera.py` background image logic.
+- Removed the unstable custom MJPEG firmware changes from the active test path.
