@@ -157,7 +157,7 @@ class Camera:
 
         try:
             saved_frames = self.write_prebuffer_with_catchup(video)
-
+            self.csi0.framesize(csi.HD)
             last_live_frame_time = time.ticks_ms()
             last_motion_check = time.ticks_ms()
 
@@ -195,6 +195,7 @@ class Camera:
         print("Saved frames:", saved_frames)
         print("Duration ms:", duration_ms)
 
+        self.csi0.framesize(csi.VGA)
         # Short cooldown helps prevent immediate repeated recordings
         time.sleep_ms(self._motion_config.post_rec_cd_ms())
 
@@ -329,8 +330,8 @@ class Camera:
 
     def save_bg_img(self):
         print("About to save background image...")
-        #self.csi0.snapshot(time=2000) # Give the user time to get ready
-        #print("Gave the user time to get ready snapshot...")
+        self.csi0.snapshot(time=2000) # Give the user time to get ready
+        print("Gave the user time to get ready snapshot...")
         self._extra_fb.draw_image(self.create_motion_frame(self.csi0.snapshot()))
         print("Saved background image - Now frame differencing!")
 

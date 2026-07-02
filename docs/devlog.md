@@ -450,3 +450,7 @@ Based on these estimates, VGA RGB565 at 5 FPS for a 10-second prebuffer would re
 - Verified that the existing Python camera code works again after restoring a stable firmware version.
 - Identified that the crash was firmware-related, not caused by the existing `Camera.py` background image logic.
 - Removed the unstable custom MJPEG firmware changes from the active test path.
+
+## 2026-07-02
+- Confirmed that mixed-resolution MJPEG recording works directly in Python.
+- Validated the intended recording pipeline: VGA RAM prebuffer frames can be written first, then the camera can switch to HD for live recording in the same MJPEG file.
