@@ -458,3 +458,12 @@ Based on these estimates, VGA RGB565 at 5 FPS for a 10-second prebuffer would re
 ## 2026-07-02
 - Investigated the architecture required for simultaneous RGB and thermal camera operation.
 - Determined from OpenMV developer guidance that true parallel RGB and thermal capture is not possible on a single OpenMV N6. It requires separate processors (for example, two OpenMV boards communicating over a serial protocol with optional FSIN/VSYNC synchronization).
+
+## 2026-07-06
+Firmware migration to OpenMV 5.0.0
+
+Updated the project from OpenMV firmware 4.8.1 to OpenMV 5.0.0 and successfully debugged the PAG7936 camera to work with the new firmware. The migration required investigating changes in the camera API and updating the camera initialization code accordingly.
+
+The PAG7936 camera is now fully operational on firmware 5.0.0, restoring image capture functionality and allowing the project to continue on the latest firmware version. During the migration, the Camera.py implementation was updated to match the new firmware behavior, including adapting to API changes introduced in OpenMV 5.0.0.
+
+A clean copy of the OpenMV 4.8.1 source code was also downloaded for future source-level comparisons between firmware versions when debugging regressions or behavior changes.

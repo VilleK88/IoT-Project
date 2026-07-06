@@ -10,10 +10,11 @@ file_manager.load_file_counters()
 camera = Camera(storage_config, file_manager)
 
 while True:
-    #camera.thermal_camera()
     camera.update_frame_buffer()
 
     if camera.should_check_motion():
         if camera.detect_motion():
             print("motion detected")
             camera.record_video_with_prebuffer()
+        else:
+            print("no motion detected")

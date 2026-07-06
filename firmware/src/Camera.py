@@ -16,13 +16,9 @@ class Camera:
         self._storage_config = storage_config
         self._file_manager = file_manager
 
-        # CSI camera handles
-        self.csi0 = None  # PAG7936 RGB camera
-        self.csi1 = None  # Lepton thermal camera
-
         # Thermal detection settings
-        self._threshold_list = [(170, 255)]
-        self._min_temp_in_celsius = 15.0
+        self._threshold_list = [(200, 255)]
+        self._min_temp_in_celsius = 20.0
         self._max_temp_in_celsius = 40.0
         self._therm_detect_counter = 0
         self._last_hot_img = None
@@ -44,21 +40,34 @@ class Camera:
         self._buf_start_time = time.ticks_ms()
         self._frame_interval_ms = self._buf_config.frame_interval_ms()
 
-        # Initialize the OpenMV N6 PAG7936 CSI camera interface
-        self._current_frame = self.init_camera()
-        #self._current_frame = None
+        # Initialize the OpenMV N6 PAG7936 CSI camera
+        self.csi0 = csi.CSI()
+        self.csi0.reset()
+        self.csi0.pixformat(csi.RGB565)
+        self.csi0.framesize(csi.VGA) # 640x480
+        self._current_frame = self.csi0.snapshot(time=2000)
+        self.csi0.auto_whitebal(False)
 
-        # Motion background buffer
+        # Motion background buffer and bg
         self._extra_fb = image.Image(self._mot_conf.motion_width(), self._mot_conf.motion_height(), csi.GRAYSCALE)
-        self.print_memory_status("After motion background buffer allocation")
-
-        self.save_bg_img()
-        self.print_memory_status("After background image capture")
-
-        self.print_memory_status("After Python ring buffer list allocation")
+        self._ring_buf_fil_count = 0
+        print("About to save background image...")
+        self._extra_fb.draw_image(self.create_motion_frame(self.csi0.snapshot()))
+        print("Saved background image - Now frame differencing!")
 
         # Initialize the OpenMV N6 Lepton CSI camera interface
-        #self.init_thermal_camera()
+        """self.csi1 = csi.CSI(cid=csi.LEPTON)
+        self.csi1.reset()  # Reset and initialize the sensor
+        self.csi1.pixformat(csi.GRAYSCALE)  # Set pixel format to RGB565 (or GRAYSCALE)
+        self.csi1.framesize(csi.QQVGA)  # Set frame size to QQVGA (160×120)
+        self.csi1.snapshot(time=5000)
+        # Enable measurement mode
+        self.csi1.ioctl(csi.IOCTL_LEPTON_SET_MODE, True, True)
+        self.csi1.ioctl(csi.IOCTL_LEPTON_SET_RANGE, self._min_temp_in_celsius, self._max_temp_in_celsius)
+        self.print_memory_status("After Lepton CSI config")"""
+
+        self._therm_frame_max_time_ms = 200
+        self._last_therm_frame_time = time.ticks_ms()
 
     def detect_motion(self):
         img = self.create_motion_frame(self._current_frame)
@@ -74,7 +83,7 @@ class Camera:
         img.difference(self._extra_fb)
 
         hist = img.get_histogram()
-        diff = hist.get_percentile(0.99).l_value() - hist.get_percentile(0.90).l_value()
+        diff = hist.get_percentile(0.99).l_value - hist.get_percentile(0.90).l_value
 
         # Motion is detected when the difference exceeds the configured threshold
         self._triggered = diff > self._mot_conf.trig_thresh()
@@ -105,14 +114,11 @@ class Camera:
 
     def record_video(self):
         print("start recording")
-
         filename, video = self.create_motion_video()
-
         self.start_recording_state()
 
         # Motion is not checked every frame during recording. This reduces CPU load and improves stability.
         last_motion_check = time.ticks_ms()
-
         try:
             while True:
                 img = self.csi0.snapshot()
@@ -128,57 +134,49 @@ class Camera:
                         break
                     else:
                         print("Motion detected while recording")
-
         finally:
             # Always close the MJPEG file even if recording exits unexpectedly
             video.close()
             self.stop_recording_state()
 
         print("record_video done")
-
         # Short cooldown helps prevent immediate repeated recordings
         time.sleep_ms(self._mot_conf.post_rec_cd_ms())
-
         self._frame_count = 0
 
     def record_video_with_prebuffer(self):
         self.print_memory_status("Before recording with prebuffer")
-
         filename, video = self.create_motion_video()
-        saved_frames = 0
         self.start_recording_state()
 
+        saved_frames = 0
         try:
-            saved_frames = self.write_prebuffer_with_catchup(video)
-            self.csi0.framesize(csi.HD)
+            saved_frames = self.write_prebuffer_with_catchup(video) # Include frames in the frame buffer to mjpeg
+            self.csi0.framesize(csi.HD) # Increase frame size to 1280x720
             last_live_frame_time = time.ticks_ms()
             last_motion_check = time.ticks_ms()
 
             while True:
                 now = time.ticks_ms()
 
-                if time.ticks_diff(now, last_live_frame_time) < self._frame_interval_ms:
-                    continue
+                if time.ticks_diff(now, last_live_frame_time) >= self._frame_interval_ms:
+                    last_live_frame_time = now
 
-                last_live_frame_time = now
+                    img = self.csi0.snapshot()
+                    video.write(img)
+                    saved_frames += 1
 
-                img = self.csi0.snapshot()
-                video.write(img)
-                saved_frames += 1
+                    # Periodically check whether motion is still present
+                    if time.ticks_diff(now, last_motion_check) >= self._mot_conf.rec_chk_int_ms():
+                        last_motion_check = now
+                        diff = self.get_motion_diff(img)
 
-                # Periodically check whether motion is still present
-                if time.ticks_diff(now, last_motion_check) >= self._mot_conf.rec_chk_int_ms():
-                    last_motion_check = now
-                    diff = self.get_motion_diff(img)
-
-                    if diff <= self._mot_conf.trig_thresh():
-                        break
-                    else:
-                        print("Motion detected while recording")
-
+                        if diff <= self._mot_conf.trig_thresh():
+                            break
+                        else:
+                            print("Motion detected while recording")
         finally:
-            # Always close the MJPEG file even if recording exits unexpectedly
-            video.close()
+            video.close() # Always close the MJPEG file even if recording exits unexpectedly
             self.stop_recording_state()
 
         duration_ms = saved_frames * self._frame_interval_ms
@@ -188,12 +186,9 @@ class Camera:
         print("Saved frames:", saved_frames)
         print("Duration ms:", duration_ms)
 
-        self.csi0.framesize(csi.VGA)
-        # Short cooldown helps prevent immediate repeated recordings
-        time.sleep_ms(self._mot_conf.post_rec_cd_ms())
-
+        self.csi0.framesize(csi.VGA) # Decrease frame size back to 640x480
+        time.sleep_ms(self._mot_conf.post_rec_cd_ms()) # Short cooldown helps prevent immediate repeated recordings
         self._frame_count = 0
-
         self.print_memory_status("After recording with prebuffer")
 
     def create_motion_video(self):
@@ -242,21 +237,15 @@ class Camera:
 
     def get_motion_diff(self, frame):
         img = self.create_motion_frame(frame)
-        # Compare the current frame against the background image
-        img.difference(self._extra_fb)
-
-        # Calculate the amount of motion from the difference image
-        hist = img.get_histogram()
-        diff = hist.get_percentile(0.99).l_value() - hist.get_percentile(0.90).l_value()
-
+        img.difference(self._extra_fb) # Compare the current frame against the bg img
+        hist = img.get_histogram() # Calculate the amount of motion from the difference img
+        diff = hist.get_percentile(0.99).l_value - hist.get_percentile(0.90).l_value
         return diff
 
     def update_frame_buffer(self):
         now = time.ticks_ms()
 
-        interval_ms = 1000 // self._buf_config.buf_fps()
-
-        if time.ticks_diff(now, self._last_frame_time) >= interval_ms:
+        if time.ticks_diff(now, self._last_frame_time) >= self._buf_config.frame_interval_ms():
             self._current_frame = self.csi0.snapshot()
             # Store a copy of the current frame in the circular buffer.
             # PAG7936 csi.VGA RGB565: ~500 KiB (0.488 MiB) RAM per buffered frame.
@@ -268,7 +257,11 @@ class Camera:
         self._buf_index = (self._buf_index + 1) % self._buf_config.buf_size()
 
         if self._buf_index == 0:
-            self.print_memory_status("After ring buffer filled once")
+            self.cleanup_memory()
+            self._ring_buf_fil_count += 1
+            print("After ring buffer filled", self._ring_buf_fil_count)
+            print("Free:", gc.mem_free())
+            print("Allocated:", gc.mem_alloc())
 
     def save_buf_as_mjpeg(self):
         print("saving buffer")
@@ -290,7 +283,7 @@ class Camera:
             # Finish and close the MJPEG file
             video.close()
 
-        duration_ms = saved_frames * (1000 // self._buf_config.buf_fps())
+        duration_ms = saved_frames * self._buf_config.frame_interval_ms()
         self._file_manager.patch_mjpeg_timing(filename, saved_frames, duration_ms)
         print("buffer saved, frames:", saved_frames)
 
@@ -321,70 +314,48 @@ class Camera:
 
         return frames
 
-    def save_bg_img(self):
-        print("About to save background image...")
-        self.csi0.snapshot(time=2000)  # Give the user time to get ready
-        print("Gave the user time to get ready snapshot...")
-        self._extra_fb.draw_image(self.create_motion_frame(self.csi0.snapshot()))
-        print("Saved background image - Now frame differencing!")
-
     def create_motion_frame(self, frame):
         img = frame.copy(
             x_scale=self._mot_conf.motion_width() / frame.width(),
             y_scale=self._mot_conf.motion_height() / frame.height()
         )
-
         img.to_grayscale()
         return img
 
     def map_g_to_temp(self, g):
         return ((g * (self._max_temp_in_celsius - self._min_temp_in_celsius)) / 255.0) + self._min_temp_in_celsius
 
-    def thermal_camera(self):
-        img = self.csi1.snapshot()
+    """def thermal_camera(self):
+        now = time.ticks_ms()
 
-        stats = img.get_statistics()
-        max_temp = self.map_g_to_temp(stats.max())
-        mean_temp = self.map_g_to_temp(stats.mean())
-
-        if max_temp - mean_temp > 3.0:
-            print("warm target detected", self._therm_detect_counter)
-
-            hot_img = img.copy()
-            hot_img.binary(self._threshold_list)
-
-            if self._last_hot_img is not None:
-                diff_img = hot_img.copy()
-                diff_img.difference(self._last_hot_img)
-
-                diff_stats = diff_img.get_statistics()
-
-                if diff_stats.max() > 0:
-                    print("warm target moving", self._therm_detect_counter)
-
-            self._therm_detect_counter += 1
-            self._last_hot_img = hot_img
-        else:
-            self._last_hot_img = None
+        if time.ticks_diff(now, self._last_therm_frame_time) >= self._therm_frame_max_time_ms:
+            self._last_therm_frame_time = now
+            #self.print_memory_status("Before taking picture")
+            img = self.csi1.snapshot()
+            #self.print_memory_status("After taking picture")
+            for blob in img.find_blobs(
+                self._threshold_list, pixels_threshold=200, area_threshold=200, merge=True
+            ):
+                stats = img.get_statistics(threshold=self._threshold_list, roi=blob.rect)
+                img.draw_detection(blob, label="%.2f C" % self.map_g_to_temp(stats.mean))"""
 
     def init_camera(self):
         # PAG7936 camera setup
-        self.csi0 = csi.CSI()
+        """self.csi0 = csi.CSI()
         self.csi0.reset() # Reset and initialize the sensor
         self.csi0.pixformat(csi.RGB565) # Set pixel format to RGB565 (or GRAYSCALE)
         self.csi0.framesize(csi.VGA) # PAG7936 csi.VGA = 640x400
         img = self.csi0.snapshot(time=2000)
         self.csi0.auto_whitebal(False)
         self.print_memory_status("After PAG7936 CSI config and first VGA snapshot")
-        return img
+        return img"""
 
     def init_thermal_camera(self):
         # Lepton thermal camera setup
-        self.csi1 = csi.CSI(cid=csi.LEPTON)
+        """self.csi1 = csi.CSI(cid=csi.LEPTON)
         self.csi1.reset()  # Reset and initialize the sensor
         self.csi1.pixformat(csi.GRAYSCALE)  # Set pixel format to RGB565 (or GRAYSCALE)
         self.csi1.framesize(csi.QQVGA)  # Set frame size to QQVGA (160×120)
-        self.print_memory_status("After Lepton CSI config")
 
         self.csi1.snapshot(time=5000)
 
@@ -392,11 +363,13 @@ class Camera:
         self.csi1.ioctl(csi.IOCTL_LEPTON_SET_MODE, True, True)
         self.csi1.ioctl(csi.IOCTL_LEPTON_SET_RANGE, self._min_temp_in_celsius, self._max_temp_in_celsius)
 
-    def deinit_thermal_camera(self):
+        self.print_memory_status("After Lepton CSI config")"""
+
+    """def deinit_thermal_camera(self):
         if self.csi1 is not None:
             self.csi1.sleep(True)
             self.csi1 = None
-            self.cleanup_memory()
+            self.cleanup_memory()"""
 
     def cleanup_memory(self):
         gc.collect()
