@@ -382,7 +382,6 @@ Based on these estimates, VGA RGB565 at 5 FPS for a 10-second prebuffer would re
 
 5-second RGB565 buffer:
 
-```text
 320x200 @ 5 FPS  =  3.05 MiB
 320x200 @ 10 FPS =  6.10 MiB
 320x200 @ 15 FPS =  9.16 MiB
