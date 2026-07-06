@@ -467,3 +467,9 @@ Updated the project from OpenMV firmware 4.8.1 to OpenMV 5.0.0 and successfully 
 The PAG7936 camera is now fully operational on firmware 5.0.0, restoring image capture functionality and allowing the project to continue on the latest firmware version. During the migration, the Camera.py implementation was updated to match the new firmware behavior, including adapting to API changes introduced in OpenMV 5.0.0.
 
 A clean copy of the OpenMV 4.8.1 source code was also downloaded for future source-level comparisons between firmware versions when debugging regressions or behavior changes.
+
+## 2026-07-06
+Continued debugging the OpenMV 5.0.0 firmware migration and identified that initializing the Lepton thermal camera causes subsequent PAG7936 frame captures to fail with `RuntimeError: Frame capture has timed out`. Determined that reinitializing the PAG7936 camera after the Lepton initialization restores normal operation, indicating that the Lepton initialization changes the CSI camera state in firmware 5.0.0. This narrows the remaining work to debugging the CSI initialization sequence rather than the application logic.
+
+## 2026-07-06
+Restored the Lepton thermal camera functionality on OpenMV firmware 5.0.0. Found that the thermal preview does not appear in OpenMV IDE unless the captured frame is explicitly flushed with `flush()`. Updated the thermal camera flow so the latest Lepton frame is captured, flushed to the IDE preview, stored as the current frame, and then used for warm-target movement detection.
