@@ -40,26 +40,15 @@ class Camera:
         self._buf_start_time = time.ticks_ms()
         self._frame_interval_ms = self._buf_config.frame_interval_ms()
 
-        """"# Initialize the OpenMV N6 Lepton CSI camera interface
-        self.csi1 = csi.CSI(cid=csi.LEPTON)
-        self.csi1.reset()  # Reset and initialize the sensor
-        self.csi1.pixformat(csi.GRAYSCALE)  # Set pixel format to RGB565 (or GRAYSCALE)
-        self.csi1.framesize(csi.QQVGA)  # Set frame size to QQVGA (160×120)
-        self.csi1.snapshot(time=5000)
-        # Enable measurement mode
-        self.csi1.ioctl(csi.IOCTL_LEPTON_SET_MODE, True, True)
-        self.csi1.ioctl(csi.IOCTL_LEPTON_SET_RANGE, self._min_temp_in_celsius, self._max_temp_in_celsius)
-        self.print_memory_status("After Lepton CSI config")
-        self._therm_frame_max_time_ms = 200
-        self._last_therm_frame_time = time.ticks_ms()"""
-
-        """# Initialize the OpenMV N6 PAG7936 CSI camera
+        # Initialize the OpenMV N6 PAG7936 CSI camera
         self.csi0 = csi.CSI()
         self.csi0.reset()
         self.csi0.pixformat(csi.RGB565)
-        self.csi0.framesize(csi.VGA) # 640x480
-        # self._current_frame = self.csi0.snapshot(time=2000)
-        self.csi0.auto_whitebal(False)"""
+        self.csi0.framesize(csi.HD) # 640x480
+        self._extra_fb = image.Image(self._mot_conf.motion_width(), self._mot_conf.motion_height(), csi.GRAYSCALE)
+        #self._extra_fb = image.Image(self.csi0.width(), self.csi0.height(), csi.GRAYSCALE)
+        self.csi0.auto_whitebal(False)
+        self._extra_fb.draw_image(self.create_motion_frame(self.csi0.snapshot()))
 
         # Initialize the OpenMV N6 Lepton CSI camera interface
         self.csi1 = csi.CSI(cid=csi.LEPTON)
@@ -80,22 +69,26 @@ class Camera:
         # Motion background buffer and bg
         #self._extra_fb = image.Image(self._mot_conf.motion_width(), self._mot_conf.motion_height(), csi.GRAYSCALE)
         self._ring_buf_fil_count = 0
-        print("About to save background image...")
+        #print("About to save background image...")
         #self._extra_fb.draw_image(self.create_motion_frame(self.csi0.snapshot()))
-        print("Saved background image - Now frame differencing!")
+        #print("Saved background image - Now frame differencing!")
 
     def reinit_pag7936_camera(self):
         self.csi0.reset()
         self.csi0.pixformat(csi.RGB565)
-        self.csi0.framesize(csi.VGA)
+        self.csi0.framesize(csi.HD)
 
     def reinit_lepton_camera(self):
         self.csi1.reset()  # Reset and initialize the sensor
         self.csi1.pixformat(csi.GRAYSCALE)  # Set pixel format to RGB565 (or GRAYSCALE)
         self.csi1.framesize(csi.QQVGA)  # Set frame size to QQVGA (160×120)
+        self._current_frame = self.csi1.snapshot(time=5000)
+        # Enable measurement mode
+        self.csi1.ioctl(csi.IOCTL_LEPTON_SET_MODE, True, True)
+        self.csi1.ioctl(csi.IOCTL_LEPTON_SET_RANGE, self._min_temp_in_celsius, self._max_temp_in_celsius)
 
-    def detect_motion(self):
-        img = self.create_motion_frame(self._current_frame)
+    def detect_motion(self, frame):
+        img = self.create_motion_frame(frame)
         self._frame_count += 1
 
         if self._frame_count > self._mot_conf.bg_upd_frames():
@@ -177,7 +170,8 @@ class Camera:
         saved_frames = 0
         try:
             saved_frames = self.write_prebuffer_with_catchup(video) # Include frames in the frame buffer to mjpeg
-            self.csi0.framesize(csi.HD) # Increase frame size to 1280x720
+            #self.csi0.framesize(csi.HD) # Increase frame size to 1280x720
+            self.reinit_pag7936_camera()
             last_live_frame_time = time.ticks_ms()
             last_motion_check = time.ticks_ms()
 
@@ -194,12 +188,28 @@ class Camera:
                     # Periodically check whether motion is still present
                     if time.ticks_diff(now, last_motion_check) >= self._mot_conf.rec_chk_int_ms():
                         last_motion_check = now
-                        diff = self.get_motion_diff(img)
+                        #break
+                        motion_frame = self.create_motion_frame(img)  # Create a smaller grayscale frame for motion detection
+                        # Compare the current frame against the adaptive background
+                        diff_frame = motion_frame.copy()
+                        diff_frame.difference(self._extra_fb)
 
-                        if diff <= self._mot_conf.trig_thresh():
-                            break
+                        # Calculate motion amount from the difference image, not from the raw frame
+                        hist = diff_frame.get_histogram()
+                        diff = hist.get_percentile(0.99).l_value - hist.get_percentile(0.90).l_value
+                        if diff > self._mot_conf.trig_thresh():
+                            print("Movement detected")
+                            # Slowly update the background after motion has been checked.
+                            # This allows lighting changes to be learned without immediately hiding motion.
+                            self._frame_count += 1
+                            if self._frame_count > self._mot_conf.bg_upd_frames():
+                                self._frame_count = 0
+                                motion_frame.blend(self._extra_fb, alpha=(255 - self._mot_conf.bg_upd_blend()))
+                                self._extra_fb.draw_image(motion_frame)
                         else:
-                            print("Motion detected while recording")
+                            break
+
+
         finally:
             video.close() # Always close the MJPEG file even if recording exits unexpectedly
             self.stop_recording_state()
@@ -211,8 +221,7 @@ class Camera:
         print("Saved frames:", saved_frames)
         print("Duration ms:", duration_ms)
 
-        self.csi0.framesize(csi.VGA) # Decrease frame size back to 640x480
-        time.sleep_ms(self._mot_conf.post_rec_cd_ms()) # Short cooldown helps prevent immediate repeated recordings
+        self.reinit_lepton_camera()
         self._frame_count = 0
         self.print_memory_status("After recording with prebuffer")
 
@@ -249,7 +258,7 @@ class Camera:
             now = time.ticks_ms()
 
             if time.ticks_diff(now, last_live_frame_time) >= self._frame_interval_ms:
-                self._current_frame = self.csi0.snapshot()
+                self._current_frame = self.csi1.snapshot()
                 catchup_frames.append(self._current_frame.copy())
                 last_live_frame_time = now
 
@@ -262,6 +271,8 @@ class Camera:
 
     def get_motion_diff(self, frame):
         img = self.create_motion_frame(frame)
+        img.blend(self._extra_fb, alpha=(255 - self._mot_conf.bg_upd_blend()))
+        self._extra_fb.draw_image(img)
         img.difference(self._extra_fb) # Compare the current frame against the bg img
         hist = img.get_histogram() # Calculate the amount of motion from the difference img
         diff = hist.get_percentile(0.99).l_value - hist.get_percentile(0.90).l_value
@@ -271,7 +282,6 @@ class Camera:
         now = time.ticks_ms()
 
         if time.ticks_diff(now, self._last_frame_time) >= self._buf_config.frame_interval_ms():
-            #self._current_frame = self.csi0.snapshot()
             self._current_frame = self.csi1.snapshot()
             self._current_frame.flush()
             # Store a copy of the current frame in the circular buffer.
@@ -352,31 +362,39 @@ class Camera:
     def map_g_to_temp(self, g):
         return ((g * (self._max_temp_in_celsius - self._min_temp_in_celsius)) / 255.0) + self._min_temp_in_celsius
 
-    def thermal_camera(self):
+    def thermal_detection(self):
         img = self._current_frame
 
+        # Estimate the hottest and average temperatures in the frame
         stats = img.get_statistics()
         max_temp = self.map_g_to_temp(stats.max)
         mean_temp = self.map_g_to_temp(stats.mean)
 
-        if max_temp - mean_temp > 3.0:
-            #print("warm target detected", self._therm_detect_counter)
-
+        # Continue only if a significantly warmer region exists
+        if max_temp - mean_temp > 8.0:
+            # Create a binary image where only hot pixels remain
             hot_img = img.copy()
             hot_img.binary(self._threshold_list)
 
+            # Compare against the previous binary thermal frame to detect movement
             if self._last_hot_img is not None:
                 diff_img = hot_img.copy()
                 diff_img.difference(self._last_hot_img)
                 diff_stats = diff_img.get_statistics()
 
+                # Any non-zero difference means the hot target has moved
                 if diff_stats.max > 0:
                     print("warm target moving", self._therm_detect_counter)
+                    return True
 
+            # Save the current binary frame for the next comparison
             self._therm_detect_counter += 1
             self._last_hot_img = hot_img
         else:
+            # Clear the previous frame when no warm target is present
             self._last_hot_img = None
+
+        return False
 
     def cleanup_memory(self):
         gc.collect()

@@ -11,7 +11,10 @@ camera = Camera(storage_config, file_manager)
 
 while True:
     camera.update_frame_buffer()
-    camera.thermal_camera()
+
+    if camera.should_check_motion:
+        if camera.thermal_detection():
+            camera.record_video_with_prebuffer()
 
     """if camera.should_check_motion():
         if camera.detect_motion():

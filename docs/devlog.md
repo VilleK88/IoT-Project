@@ -472,3 +472,15 @@ Continued debugging the OpenMV 5.0.0 firmware migration and identified that init
 
 ## 2026-07-06
 Restored the Lepton thermal camera functionality on OpenMV firmware 5.0.0. Found that the thermal preview does not appear in OpenMV IDE unless the captured frame is explicitly flushed with `flush()`. Updated the thermal camera flow so the latest Lepton frame is captured, flushed to the IDE preview, stored as the current frame, and then used for warm-target movement detection.
+
+## 2026-07-06
+Investigated simultaneous use of the PAG7936 RGB camera and Lepton thermal camera on OpenMV 5.0.0. Testing and firmware debugging indicate that both cameras cannot operate as independent continuous streams on a single OpenMV N6. Initializing the Lepton changes the CSI state, requiring the PAG7936 camera to be reinitialized before it can capture frames again. This indicates that the project should switch between thermal monitoring and RGB recording modes instead of attempting to stream both cameras simultaneously.
+
+## 2026-07-06
+Camera pipeline improvements
+
+- Implemented automatic switching between the Lepton thermal camera and the PAG7936 RGB camera.
+- Lepton now continuously captures thermal frames, updates the thermal frame buffer, and performs warm target movement detection.
+- When movement is detected, the system automatically switches to the PAG7936 camera, records RGB video, and monitors motion until it stops.
+- After recording ends, the system automatically reinitializes the Lepton camera and resumes thermal monitoring.
+- Resolved multiple OpenMV 5.0.0 camera switching issues, including camera reinitialization, framebuffer initialization, and reliable RGB motion-stop detection after switching from the thermal camera.
