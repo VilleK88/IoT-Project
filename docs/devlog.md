@@ -484,3 +484,13 @@ Camera pipeline improvements
 - When movement is detected, the system automatically switches to the PAG7936 camera, records RGB video, and monitors motion until it stops.
 - After recording ends, the system automatically reinitializes the Lepton camera and resumes thermal monitoring.
 - Resolved multiple OpenMV 5.0.0 camera switching issues, including camera reinitialization, framebuffer initialization, and reliable RGB motion-stop detection after switching from the thermal camera.
+
+## 2026-07-07
+Camera.py documentation and refactoring
+
+- Added descriptive comments above all major functions to improve readability and maintainability.
+- Refactored Camera.py to improve function organization and code clarity without changing functionality.
+- Documented the responsibilities of the RGB camera, Lepton thermal camera, circular frame buffer, and recording pipeline.
+- Clarified the dual-camera workflow by documenting camera switching, motion detection, recording, and cleanup functions.
+- Standardized function documentation using concise comments above each function, following the project's C/C++ documentation style.
+

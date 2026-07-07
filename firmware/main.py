@@ -15,10 +15,3 @@ while True:
     if camera.should_check_motion:
         if camera.thermal_detection():
             camera.record_video_with_prebuffer()
-
-    """if camera.should_check_motion():
-        if camera.detect_motion():
-            print("motion detected")
-            camera.record_video_with_prebuffer()
-        else:
-            print("no motion detected")"""
