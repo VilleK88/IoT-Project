@@ -14,4 +14,4 @@ while True:
 
     if camera.should_check_motion:
         if camera.thermal_detection():
-            camera.record_video_with_prebuffer()
+            camera.record_video()

@@ -40,9 +40,14 @@ class Camera:
         self.csi0.reset()
         self.csi0.pixformat(csi.RGB565)
         self.csi0.framesize(csi.HD) # 640x480
-        self._extra_fb = image.Image(self._mot_conf.motion_width(), self._mot_conf.motion_height(), csi.GRAYSCALE)
+        self.csi0.snapshot(time=2000)  # Let new settings take effect.
         self.csi0.auto_whitebal(False)
+        self._extra_fb = image.Image(self._mot_conf.motion_width(), self._mot_conf.motion_height(), csi.GRAYSCALE)
+
+        print("About to save background image...")
+        self.csi0.snapshot(time=2000)  # Give the user time to get ready.
         self._extra_fb.draw_image(self.create_motion_frame(self.csi0.snapshot()))
+        print("Saved background image - Now frame differencing!")
 
         # Thermal detection settings
         self._threshold_list = [(100, 255)]
@@ -56,7 +61,7 @@ class Camera:
         self.csi1.reset()  # Reset and initialize the sensor
         self.csi1.pixformat(csi.GRAYSCALE)  # Set pixel format to RGB565 (or GRAYSCALE)
         self.csi1.framesize(csi.QQVGA)  # Set frame size to QQVGA (160×120)
-        self._current_frame = self.csi1.snapshot(time=5000)
+        self._current_frame = self.csi1.snapshot(time=5000) # Let new settings take effect.
         # Enable measurement mode
         self.csi1.ioctl(csi.IOCTL_LEPTON_SET_MODE, True, True)
         self.csi1.ioctl(csi.IOCTL_LEPTON_SET_RANGE, self._min_temp_in_celsius, self._max_temp_in_celsius)
@@ -104,29 +109,11 @@ class Camera:
         # Motion is detected when the measured difference exceeds the
         # configured threshold.
         self._triggered = diff > self._mot_conf.trig_thresh()
+        if self._triggered:
+            print("Movement detected, diff:", diff)
+        else:
+            print("Movement not detected, diff:", diff)
         return self._triggered
-
-    # Checks whether motion is still present while recording.
-    # RGB frames are used because the thermal camera is temporarily inactive.
-    def detect_motion_during_recording(self, img):
-        motion_frame = self.create_motion_frame(img)  # Create a smaller grayscale frame for motion detection
-        # Compare the current frame against the adaptive background
-        diff_frame = motion_frame.copy()
-        diff_frame.difference(self._extra_fb)
-        # Calculate motion amount from the difference image, not from the raw frame
-        hist = diff_frame.get_histogram()
-        diff = hist.get_percentile(0.99).l_value - hist.get_percentile(0.90).l_value
-        if diff > self._mot_conf.trig_thresh():
-            print("Movement detected")
-            # Slowly update the background after motion has been checked.
-            # This allows lighting changes to be learned without immediately hiding motion.
-            self._frame_count += 1
-            if self._frame_count > self._mot_conf.bg_upd_frames():
-                self._frame_count = 0
-                motion_frame.blend(self._extra_fb, alpha=(255 - self._mot_conf.bg_upd_blend()))
-                self._extra_fb.draw_image(motion_frame)
-            return True
-        return False
 
     # Returns True when it is time to perform the next motion check.
     def should_check_motion(self):
@@ -161,7 +148,7 @@ class Camera:
 
     # Records an MJPEG video beginning with the buffered frames
     # followed by live RGB frames.
-    def record_video_with_prebuffer(self):
+    def record_video(self):
         self.print_memory_status("Before recording with prebuffer")
         # Create a new MJPEG file and prepare the camera for recording.
         filename, video = self.create_motion_video()
@@ -188,7 +175,7 @@ class Camera:
                     if time.ticks_diff(now, last_motion_check) >= self._mot_conf.rec_chk_int_ms():
                         last_motion_check = now
                         # Stop recording once no motion is detected.
-                        if not self.detect_motion_during_recording(img):
+                        if not self.detect_motion(img):
                             break
         finally:
             # Always close the MJPEG file, even if recording exits unexpectedly.

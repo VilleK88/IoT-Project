@@ -494,3 +494,12 @@ Camera.py documentation and refactoring
 - Clarified the dual-camera workflow by documenting camera switching, motion detection, recording, and cleanup functions.
 - Standardized function documentation using concise comments above each function, following the project's C/C++ documentation style.
 
+
+## 2026-07-07
+Recording workflow improvements
+
+- Simplified the recording workflow by removing the separate recording-time motion detection implementation.
+- Reused the existing adaptive background frame differencing algorithm for motion detection during RGB recording.
+- Fixed the recording loop so it correctly stops once motion is no longer detected.
+- Refactored the recording pipeline to use a single motion detection implementation for both monitoring and recording.
+
