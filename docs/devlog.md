@@ -521,3 +521,10 @@ NetworkManager foundation
 - Added NetworkConfig to isolate network credentials from the networking implementation.
 - Updated .gitignore to exclude the local NetworkConfig file from version control while allowing an example configuration to be shared with the project.
 
+
+## 2026-07-08
+Network connection and time synchronization
+
+- Added NetworkManager initialization for setting up the network connection from main.py.
+- Added NTP-based time synchronization so the OpenMV RTC can be updated after network connection.
+

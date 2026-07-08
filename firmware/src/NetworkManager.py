@@ -1,6 +1,7 @@
 from src.NetworkConfig import NetworkConfig
 import network
 import time
+import ntptime
 
 class NetworkManager:
     # Initializes the network manager.
@@ -12,6 +13,10 @@ class NetworkManager:
         self._wlan = network.WLAN(network.STA_IF)
         self._wlan.active(True)
 
+    def initialize(self):
+        self.connect()
+        self.sync_time()
+
     # Connects the device to the configured WiFi network.
     def connect(self):
         self._wlan.connect(self._ssid, self._key)
@@ -22,3 +27,9 @@ class NetworkManager:
 
         # A valid IP address should now be assigned by DHCP.
         print("WiFi connected:", self._wlan.ifconfig())
+
+    def sync_time(self):
+        print("Updating date and time...")
+        ntptime.settime()
+        print("Date and time updated")
+        print(time.localtime())

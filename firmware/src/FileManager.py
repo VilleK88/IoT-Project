@@ -8,6 +8,10 @@ class FileManager:
         self._img_count = 0
         self._pre_buf_count = 0
 
+    def initialize(self):
+        self.prepare_directories()
+        self.load_file_counters()
+
     # Creates all required project directories on the SD card.
     def prepare_directories(self):
         # Create directories if they don't already exist
