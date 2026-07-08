@@ -512,3 +512,12 @@ MJPEG AVI index patching
 - Updated the RIFF container size after appending the idx1 chunk.
 - Fixed MJPEG playback so media players immediately recognize the correct video duration and support proper seeking without rebuilding the AVI index.
 
+
+## 2026-07-08
+NetworkManager foundation
+
+- Added the initial NetworkManager class to separate networking functionality from the camera logic.
+- Designed the networking architecture to support both the current WiFi implementation and a future mobile communication module.
+- Added NetworkConfig to isolate network credentials from the networking implementation.
+- Updated .gitignore to exclude the local NetworkConfig file from version control while allowing an example configuration to be shared with the project.
+

@@ -1,7 +1,10 @@
+from src.NetworkManager import NetworkManager
 from src.StorageConfig import StorageConfig
 from src.FileManager import FileManager
 from src.Camera import Camera
 
+network_manager = NetworkManager()
+network_manager.connect()
 storage_config = StorageConfig()
 file_manager = FileManager(storage_config)
 file_manager.prepare_directories()
