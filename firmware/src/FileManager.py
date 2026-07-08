@@ -153,3 +153,76 @@ class FileManager:
     # Advances the pre-buffer video counter.
     def increase_pre_buf_count(self):
         self._pre_buf_count += 1
+
+    # Reads a 32-bit unsigned integer in little-endian format.
+    def read_u32_le(self, file):
+        data = file.read(4)
+        # Combine the four bytes into a single 32-bit unsigned integer.
+        return data[0] | (data[1] << 8) | (data[2] << 16) | (data[3] << 24)
+
+    # Appends a missing AVI idx1 index to an OpenMV MJPEG file.
+    def patch_mjpeg_index(self, filename):
+        # Byte offset of the RIFF file size field.
+        # This value must be updated after the idx1 chunk has been appended.
+        riff_size_offset = 4
+
+        # In OpenMV's MJPEG header, the "movi" FOURCC starts at byte 220.
+        # The first video frame chunk starts directly after it at byte 224.
+        movi_base = 220
+        frame_pos = 224
+
+        # Stores the offset and size of every video frame.
+        # These values are later written to the AVI idx1 chunk.
+        index_entries = []
+
+        with open(filename, "r+b") as file:
+            # Determine the total file size so we know when to stop scanning.
+            file.seek(0, 2)
+            file_size = file.tell()
+
+            # Jump to the first MJPEG frame.
+            file.seek(frame_pos)
+
+            # Scan every video frame stored in the AVI "movi" section.
+            while file.tell() + 8 <= file_size:
+                # Remember where the current frame chunk begins.
+                chunk_pos = file.tell()
+                # Every MJPEG video frame should begin with the "00dc" FOURCC.
+                chunk_id = file.read(4)
+                # Stop scanning if another chunk type is encountered.
+                if chunk_id != b"00dc":
+                    break
+                # Read the size of the JPEG frame.
+                chunk_size = self.read_u32_le(file)
+
+                # AVI idx1 stores frame offsets relative to the start of
+                # the "movi" list instead of the beginning of the file.
+                chunk_offset = chunk_pos - movi_base
+                index_entries.append((chunk_offset, chunk_size))
+
+                # Skip over the JPEG image data to reach the next frame.
+                file.seek(chunk_size, 1)
+            # Abort if no video frames were found.
+            if len(index_entries) == 0:
+                print("No MJPEG frames found for AVI index")
+                return
+
+            # Append the AVI idx1 chunk to the end of the file.
+            file.seek(0, 2)
+            file.write(b"idx1")
+            # Each idx1 entry occupies 16 bytes.
+            self.write_u32_le(file, len(index_entries) * 16)
+            # Write one index entry for every recorded frame.
+            for chunk_offset, chunk_size in index_entries:
+                file.write(b"00dc")  # Frame chunk identifier.
+                self.write_u32_le(file, 0x10)  # AVIIF_KEYFRAME flag.
+                self.write_u32_le(file, chunk_offset)  # Offset within the movi list.
+                self.write_u32_le(file, chunk_size)  # Size of the JPEG frame.
+
+            # The file has grown after appending the idx1 chunk.
+            # Update the RIFF file size so the AVI container remains valid.
+            final_size = file.tell()
+            self.patch_u32(file, riff_size_offset, final_size - 8)
+
+        print("Patched AVI index")
+        print("Indexed frames:", len(index_entries))

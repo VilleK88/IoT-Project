@@ -47,7 +47,7 @@ class Camera:
         print("About to save background image...")
         self.csi0.snapshot(time=2000)  # Give the user time to get ready.
         self._extra_fb.draw_image(self.create_motion_frame(self.csi0.snapshot()))
-        print("Saved background image - Now frame differencing!")
+        print("Saved background image")
 
         # Thermal detection settings
         self._threshold_list = [(100, 255)]
@@ -185,13 +185,14 @@ class Camera:
             # Update the MJPEG timing so playback matches the original capture rate.
             duration_ms = saved_frames * self._frame_interval_ms
             self._file_manager.patch_mjpeg_timing(filename, saved_frames, duration_ms)
+            self._file_manager.patch_mjpeg_index(filename)
             print("Saved frames:", saved_frames)
             print("Duration ms:", duration_ms)
-            # Return to thermal monitoring mode.
-            self.reinit_lepton_camera()
             # Reset the adaptive background update counter for the next recording.
             self._frame_count = 0
             self.print_memory_status("record_video_with_prebuffer done")
+            # Return to thermal monitoring mode.
+            self.reinit_lepton_camera()
 
     # Creates a new MJPEG file for motion recording.
     def create_motion_video(self):
@@ -379,7 +380,7 @@ class Camera:
         mean_temp = self.map_g_to_temp(stats.mean)
 
         # Continue only if a significantly warmer region exists
-        if max_temp - mean_temp > 8.0:
+        if max_temp - mean_temp > 6.0:
             # Create a binary image where only hot pixels remain
             hot_img = img.copy()
             hot_img.binary(self._threshold_list)

@@ -503,3 +503,12 @@ Recording workflow improvements
 - Fixed the recording loop so it correctly stops once motion is no longer detected.
 - Refactored the recording pipeline to use a single motion detection implementation for both monitoring and recording.
 
+
+## 2026-07-08
+MJPEG AVI index patching
+
+- Implemented AVI idx1 index patching for OpenMV-generated MJPEG files.
+- Added automatic scanning of MJPEG frame chunks and generation of the missing AVI index.
+- Updated the RIFF container size after appending the idx1 chunk.
+- Fixed MJPEG playback so media players immediately recognize the correct video duration and support proper seeking without rebuilding the AVI index.
+
