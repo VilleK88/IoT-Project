@@ -10,8 +10,10 @@ import gc
 
 class Camera:
     # Initializes the camera system and all runtime resources.
-    def __init__(self, storage_config, file_manager):
+    def __init__(self, storage_config, file_manager, network_manager):
         self.print_memory_status("Before CSI init")
+
+        self._network_manager = network_manager
 
         # External dependencies
         self._storage_config = storage_config
@@ -191,6 +193,8 @@ class Camera:
             # Reset the adaptive background update counter for the next recording.
             self._frame_count = 0
             self.print_memory_status("record_video_with_prebuffer done")
+            self._network_manager.upload_mjpeg(filename)
+            self.print_memory_status("upload_mjpeg done")
             # Return to thermal monitoring mode.
             self.reinit_lepton_camera()
 

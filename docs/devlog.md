@@ -528,3 +528,16 @@ Network connection and time synchronization
 - Added NetworkManager initialization for setting up the network connection from main.py.
 - Added NTP-based time synchronization so the OpenMV RTC can be updated after network connection.
 
+
+## 2026-07-14
+AWS cloud upload implementation
+
+- Created an AWS S3 bucket for storing recorded MJPEG files.
+- Created an AWS Lambda function that generates temporary presigned S3 upload URLs.
+- Configured the Lambda execution role with restricted S3 PutObject permission.
+- Created an API Gateway HTTPS endpoint for requesting presigned upload URLs.
+- Implemented MJPEG uploading in NetworkManager using a TLS socket.
+- Streamed MJPEG files to S3 in 4 KiB chunks without loading the complete recording into RAM.
+- Verified a successful end-to-end upload of a 24.6 MB MJPEG recording from the OpenMV N6 to Amazon S3.
+- Confirmed that S3 returned HTTP 200 OK and that the uploaded video remained playable.
+

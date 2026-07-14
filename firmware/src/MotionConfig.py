@@ -1,6 +1,6 @@
 class MotionConfig:
     def __init__(self):
-        self._trig_thresh = 15  # Motion detection threshold 5
+        self._trig_thresh = 25  # Motion detection threshold 5
         self._motion_width = 320
         self._motion_height = 240
         self._bg_upd_frames = 50  # Frames between background updates

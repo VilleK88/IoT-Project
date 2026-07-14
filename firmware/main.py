@@ -9,7 +9,7 @@ storage_config = StorageConfig()
 file_manager = FileManager(storage_config)
 file_manager.initialize()
 
-camera = Camera(storage_config, file_manager)
+camera = Camera(storage_config, file_manager, network_manager)
 
 while True:
     camera.update_frame_buffer()
