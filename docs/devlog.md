@@ -541,3 +541,13 @@ AWS cloud upload implementation
 - Verified a successful end-to-end upload of a 24.6 MB MJPEG recording from the OpenMV N6 to Amazon S3.
 - Confirmed that S3 returned HTTP 200 OK and that the uploaded video remained playable.
 
+
+## 2026-07-14
+AWS upload performance optimization
+
+- Benchmarked MJPEG upload performance using 4 KiB, 8 KiB, 16 KiB and 32 KiB socket streaming chunk sizes with the same recording.
+- Verified successful uploads and HTTP 200 OK responses from Amazon S3 with all tested chunk sizes.
+- Selected a 16 KiB upload chunk size as the current default because it provided the best overall performance while maintaining stable operation.
+- The selected chunk size will be validated again under the final runtime conditions where motion detection and the frame buffer remain active during uploads.
+- The planned upload workflow is to automatically upload all MJPEG recordings found in the motion_capture directory whenever the camera is idle. If new motion is detected, the current upload will be interrupted immediately, recording will resume, and the remaining files will continue uploading once the camera becomes idle again.
+

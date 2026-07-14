@@ -73,10 +73,12 @@ class NetworkManager:
 
             self.write_all(tls_sock, request_header.encode())
 
+            upload_start_time = time.ticks_ms()
+
             # Stream the file to S3 in small blocks.
             with open(filename, "rb") as file:
                 while True:
-                    chunk = file.read(4096)
+                    chunk = file.read(16384)  # 4096, 8192, 16384, 32768
 
                     if not chunk:
                         break
@@ -98,6 +100,11 @@ class NetworkManager:
                 raise OSError("MJPEG upload failed")
 
             print("MJPEG upload successful")
+
+            upload_duration_ms = time.ticks_diff(time.ticks_ms(), upload_start_time)
+
+            print("Upload duration ms:", upload_duration_ms)
+            print("Upload speed KiB/s:", (file_size * 1000) // upload_duration_ms // 1024)
 
         finally:
             if tls_sock is not None:
