@@ -1,5 +1,6 @@
 from src.MotionConfig import MotionConfig
 from src.BufferConfig import BufferConfig
+from src.UploadConfig import UploadConfig
 import mjpeg
 import csi
 import machine
@@ -18,6 +19,8 @@ class Camera:
         # External dependencies
         self._storage_config = storage_config
         self._file_manager = file_manager
+
+        self._upload_config = UploadConfig()
 
         # Hardware indicators
         self._led = machine.LED("LED_RED") # Status LED is used to indicate active recording
@@ -193,8 +196,10 @@ class Camera:
             # Reset the adaptive background update counter for the next recording.
             self._frame_count = 0
             self.print_memory_status("record_video_with_prebuffer done")
-            self._network_manager.upload_mjpeg(filename)
-            self.print_memory_status("upload_mjpeg done")
+            # Upload the MJPEG file if upload settings are set to instantly
+            if self._upload_config.instantly():
+                self._network_manager.upload_mjpeg(filename)
+                self.print_memory_status("upload_mjpeg done")
             # Return to thermal monitoring mode.
             self.reinit_lepton_camera()
 

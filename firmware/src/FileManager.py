@@ -7,6 +7,7 @@ class FileManager:
         self._vid_count = 0
         self._img_count = 0
         self._pre_buf_count = 0
+        self._motion_capture_dir = "/sdcard/motion_capture"
 
     def initialize(self):
         self.prepare_directories()
@@ -230,3 +231,27 @@ class FileManager:
 
         print("Patched AVI index")
         print("Indexed frames:", len(index_entries))
+
+    def if_files(self):
+        directory = os.listdir(self._motion_capture_dir)
+
+        if directory:
+            mjpeg_files = []
+            for file in directory:
+                if file.lower().endswith(".mjpeg"):
+                    mjpeg_files.append(file)
+            print("Directory is not empty.")
+            return mjpeg_files
+        else:
+            print("Directory is empty.")
+            return None
+
+    def delete_file(self, filename):
+        try:
+            os.remove(filename)
+            print(filename, "removed")
+        except OSError as error:
+            print("Failed to remove", filename, ":", error)
+
+    def motion_capture_dir(self):
+        return self._motion_capture_dir

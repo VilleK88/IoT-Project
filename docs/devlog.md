@@ -551,3 +551,20 @@ AWS upload performance optimization
 - The selected chunk size will be validated again under the final runtime conditions where motion detection and the frame buffer remain active during uploads.
 - The planned upload workflow is to automatically upload all MJPEG recordings found in the motion_capture directory whenever the camera is idle. If new motion is detected, the current upload will be interrupted immediately, recording will resume, and the remaining files will continue uploading once the camera becomes idle again.
 
+
+## 2026-07-15
+### Devlog
+
+* Added configurable MJPEG upload scheduling.
+* Implemented upload modes:
+
+  * Instantly
+  * Hourly
+  * Twice per day
+  * Once per day
+* Added configurable upload times for scheduled uploads.
+* Implemented a lightweight scheduler that checks upload conditions once per minute using `time.ticks_ms()`.
+* Created `UploadConfig` to centralize upload scheduling configuration.
+* Refactored upload configuration to use a single settings structure as the source of truth, simplifying configuration management.
+* Integrated scheduled upload functionality into `NetworkManager`.
+
