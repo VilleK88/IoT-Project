@@ -28,8 +28,7 @@ class NetworkManager:
     def initialize(self):
         self.connect()
         self.sync_time()
-        settings = self._upload_config.settings()
-        #self.upload_mjpeg_files()
+        self.upload_mjpeg_files()
 
     # Connects the device to the configured WiFi network.
     def connect(self):
@@ -53,19 +52,18 @@ class NetworkManager:
     def scheduled_upload(self):
         option = self._upload_config.current_setting()
         year, month, day, hour, minute, second, weekday, yearday = time.localtime()
-        match option:
-            case "Hourly":
-                if minute == 0 and second == 0:
+        if option == "Hourly":
+            if minute == 0 and second == 0:
+                self.upload_mjpeg_files()
+        elif option == "Twice per day":
+            for item in self._upload_config.times():
+                if item[0] == hour and item[1] == minute:
                     self.upload_mjpeg_files()
-            case "Twice per day":
-                for item in self._upload_config.times():
-                    if item[0] == hour and item[1] == minute:
-                        self.upload_mjpeg_files()
-            case "Once per day":
-                if self._upload_config.times()[0][0] == hour and self._upload_config.times()[0][1] == minute:
-                    self.upload_mjpeg_files()
-            case _:
-                print("Unknown command!")
+        elif option == "Once per day":
+            if self._upload_config.times()[0][0] == hour and self._upload_config.times()[0][1] == minute:
+                self.upload_mjpeg_files()
+        else:
+            print("Unknown command!")
 
     def should_upload(self):
         now = time.ticks_ms()
@@ -81,7 +79,8 @@ class NetworkManager:
             for file in files:
                 filename = self._file_manager.motion_capture_dir() + "/" + file
                 if self.upload_mjpeg(filename):
-                    self._file_manager.delete_file(filename)
+                    #self._file_manager.delete_file(filename)
+                    print(f"File deleted {filename}")
 
     # Uploads an MJPEG file to AWS S3 using a presigned URL.
     def upload_mjpeg(self, filename):

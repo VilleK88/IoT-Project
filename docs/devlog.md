@@ -568,3 +568,15 @@ AWS upload performance optimization
 * Refactored upload configuration to use a single settings structure as the source of truth, simplifying configuration management.
 * Integrated scheduled upload functionality into `NetworkManager`.
 
+
+## 2026-07-15
+Implemented an AWS S3 event-driven processing pipeline for uploaded MJPEG videos.
+
+- Configured an S3 event notification to automatically invoke the ProcessUploadedMJPEG Lambda function whenever a new MJPEG file is uploaded.
+- Implemented Lambda functionality to download uploaded MJPEG files directly from S3 to temporary storage.
+- Developed an MJPEG parser that detects individual JPEG frame boundaries using JPEG start (FFD8) and end (FFD9) markers.
+- Verified the parser by counting the total number of frames contained in uploaded MJPEG files.
+- Extended the Lambda implementation to extract every JPEG frame from the MJPEG stream.
+- Optimized frame extraction to upload each JPEG frame directly to S3 from memory without storing all extracted frames simultaneously on disk.
+- Added automatic creation of per-video frame directories under the frames/ folder in S3.
+- Verified the complete processing pipeline by successfully extracting and uploading all JPEG frames from uploaded MJPEG recordings.

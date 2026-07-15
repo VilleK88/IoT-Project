@@ -10,7 +10,7 @@ file_manager.initialize()
 network_manager = NetworkManager(file_manager)
 network_manager.initialize()
 
-camera = Camera(storage_config, file_manager, network_manager)
+"""camera = Camera(storage_config, file_manager, network_manager)
 
 while True:
     camera.update_frame_buffer()
@@ -20,4 +20,4 @@ while True:
             camera.record_video()
 
     if network_manager.should_upload():
-        network_manager.scheduled_upload()
+        network_manager.scheduled_upload()"""
