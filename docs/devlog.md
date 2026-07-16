@@ -606,3 +606,14 @@ AWS Repository Improvements
 - Added the default `upload_settings.json` configuration file to the repository for version-controlled AI processing settings and target species configuration.
 - Expanded the default target species configuration to include common Finnish wildlife together with generic animal and human detection labels.
 - Verified that the repository configuration matches the deployed AWS Lambda implementation.
+
+## 2026-07-16
+AWS Processing Metadata Storage
+
+- Added DynamoDB integration to store processing metadata for every uploaded MJPEG video.
+- Implemented automatic metadata writes from the AWS Lambda processing pipeline after successful video analysis.
+- Stored processing status, source video information, frame statistics, processing duration and S3 object locations in DynamoDB.
+- Added detection summary and target-species detection results to each processing record.
+- Chose DynamoDB because it provides fast key-based lookups, scales automatically, requires no server management and is well suited for tracking the processing state of individual uploaded videos.
+- Verified successful end-to-end integration between AWS Lambda and DynamoDB by confirming that processed videos automatically create metadata records.
+

@@ -9,6 +9,14 @@ import urllib.parse
 # can reuse them between invocations when possible.
 s3 = boto3.client("s3")
 
+# DynamoDB stores the processing state and searchable metadata for each video.
+dynamodb = boto3.resource("dynamodb")
+STATUS_TABLE_NAME = os.environ.get(
+    "STATUS_TABLE_NAME",
+    "IoTMediaProcessingStatus"
+)
+status_table = dynamodb.Table(STATUS_TABLE_NAME)
+
 # Amazon Rekognition is called through the Ireland region because
 # the service endpoint is not being used from the Stockholm region.
 rekognition = boto3.client(
@@ -22,6 +30,73 @@ SETTINGS_KEY = "settings/upload_settings.json"
 
 # Number of bytes read from the MJPEG file at a time.
 READ_CHUNK_SIZE = 65536
+
+
+# Writes the current processing state and metadata to DynamoDB.
+#
+# The DynamoDB table must use "video_key" as its partition key.
+def save_processing_status(
+    video_key,
+    status,
+    **attributes
+):
+    item = {
+        "video_key": video_key,
+        "status": status,
+        "updated_at": int(time.time())
+    }
+
+    # DynamoDB does not accept Python None values.
+    for key, value in attributes.items():
+        if value is not None:
+            item[key] = value
+
+    status_table.put_item(
+        Item=item
+    )
+
+
+# Converts a processing summary into DynamoDB-safe metadata.
+def create_database_metadata(
+    source_key,
+    source_size,
+    result_key,
+    processing_duration_ms,
+    processing_result,
+    detection_summary,
+    organized_detections
+):
+    return {
+        "source_size_bytes": source_size,
+        "result_key": result_key,
+        "total_frames": processing_result[
+            "frame_count"
+        ],
+        "analyzed_frames": processing_result[
+            "analyzed_frame_count"
+        ],
+        "processing_duration_ms": (
+            processing_duration_ms
+        ),
+        "target_species_detected": (
+            detection_summary[
+                "target_species_detected"
+            ]
+        ),
+        "detected_target_species": (
+            detection_summary[
+                "detected_target_species"
+            ]
+        ),
+        # Store the detailed structures as JSON strings so the
+        # database item remains simple and avoids float conversion issues.
+        "summary_json": json.dumps(
+            detection_summary
+        ),
+        "organized_detections_json": json.dumps(
+            organized_detections
+        )
+    }
 
 
 # Used if the settings file is missing or contains an invalid value.
@@ -845,7 +920,22 @@ def process_mjpeg_record(record):
         bucket
     )
 
+    save_processing_status(
+        source_key,
+        "PROCESSING",
+        filename=filename,
+        bucket=bucket,
+        started_at=int(processing_start_time)
+    )
+
     if not settings["enabled"]:
+        save_processing_status(
+            source_key,
+            "SKIPPED",
+            filename=filename,
+            bucket=bucket,
+            reason="Processing disabled in settings"
+        )
         print(
             "Processing disabled in settings"
         )
@@ -971,6 +1061,25 @@ def process_mjpeg_record(record):
             processing_duration_ms
         )
 
+        database_metadata = create_database_metadata(
+            source_key,
+            source_size,
+            result_key,
+            processing_duration_ms,
+            processing_result,
+            detection_summary,
+            organized_detections
+        )
+
+        save_processing_status(
+            source_key,
+            "COMPLETED",
+            filename=filename,
+            bucket=bucket,
+            completed_at=int(time.time()),
+            **database_metadata
+        )
+
         return {
             "source": source_key,
             "result_key": result_key,
@@ -995,6 +1104,17 @@ def process_mjpeg_record(record):
                 ]
             )
         }
+
+    except Exception as error:
+        save_processing_status(
+            source_key,
+            "FAILED",
+            filename=filename,
+            bucket=bucket,
+            failed_at=int(time.time()),
+            error=str(error)
+        )
+        raise
 
     finally:
         # Always remove the temporary MJPEG file.
