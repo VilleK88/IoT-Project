@@ -580,3 +580,12 @@ Implemented an AWS S3 event-driven processing pipeline for uploaded MJPEG videos
 - Optimized frame extraction to upload each JPEG frame directly to S3 from memory without storing all extracted frames simultaneously on disk.
 - Added automatic creation of per-video frame directories under the frames/ folder in S3.
 - Verified the complete processing pipeline by successfully extracting and uploading all JPEG frames from uploaded MJPEG recordings.
+
+## 2026-07-16
+- Investigated upload-time resets occurring after RGB video recording and during HTTPS uploads.
+- Added memory diagnostics before upload, after TLS initialization and before file streaming to identify the failure point.
+- Added upload progress logging to monitor long MJPEG transfers.
+- Determined that the resets occurred after the PAG7936 camera had been used rather than during MJPEG file streaming.
+- Shut down the PAG7936 camera before starting HTTPS uploads to release camera resources.
+- Verified stable MJPEG uploads after the camera shutdown change.
+- Confirmed that the original 16384-byte upload buffer operates reliably after shutting down the PAG7936 camera, making the previous chunk-size reduction unnecessary.

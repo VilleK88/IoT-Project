@@ -1,6 +1,7 @@
 from src.MotionConfig import MotionConfig
 from src.BufferConfig import BufferConfig
 from src.UploadConfig import UploadConfig
+from src.Tools import Tools
 import mjpeg
 import csi
 import machine
@@ -12,7 +13,8 @@ import gc
 class Camera:
     # Initializes the camera system and all runtime resources.
     def __init__(self, storage_config, file_manager, network_manager):
-        self.print_memory_status("Before CSI init")
+        self._tools = Tools()
+        self._tools.print_memory_status("Before CSI init")
 
         self._network_manager = network_manager
 
@@ -70,7 +72,7 @@ class Camera:
         # Enable measurement mode
         self.csi1.ioctl(csi.IOCTL_LEPTON_SET_MODE, True, True)
         self.csi1.ioctl(csi.IOCTL_LEPTON_SET_RANGE, self._min_temp_in_celsius, self._max_temp_in_celsius)
-        self.print_memory_status("After Lepton CSI config")
+        self._tools.print_memory_status("After Lepton CSI config")
         self._therm_frame_max_time_ms = 200
         self._last_therm_frame_time = time.ticks_ms()
 
@@ -91,6 +93,13 @@ class Camera:
         # Enable measurement mode
         self.csi1.ioctl(csi.IOCTL_LEPTON_SET_MODE, True, True)
         self.csi1.ioctl(csi.IOCTL_LEPTON_SET_RANGE, self._min_temp_in_celsius, self._max_temp_in_celsius)
+
+    # Shuts down the PAG7936 RGB camera before a blocking upload.
+    def shutdown_pag7936_camera(self):
+        print("Shutting down PAG7936 camera")
+        self.csi0.shutdown(True)
+        self._tools.cleanup_memory()
+        self._tools.print_memory_status("After PAG7936 shutdown")
 
     # Detects motion by comparing the current frame against the
     # adaptive background image.
@@ -154,7 +163,8 @@ class Camera:
     # Records an MJPEG video beginning with the buffered frames
     # followed by live RGB frames.
     def record_video(self):
-        self.print_memory_status("Before recording with prebuffer")
+        #self.print_memory_status("Before recording with prebuffer")
+        self._tools.print_memory_status("Before recording with prebuffer")
         # Create a new MJPEG file and prepare the camera for recording.
         filename, video = self.create_motion_video()
         self.start_recording_state()
@@ -195,11 +205,12 @@ class Camera:
             print("Duration ms:", duration_ms)
             # Reset the adaptive background update counter for the next recording.
             self._frame_count = 0
-            self.print_memory_status("record_video_with_prebuffer done")
+            self._tools.print_memory_status("record_video_with_prebuffer done")
             # Upload the MJPEG file if upload settings are set to instantly
-            if self._upload_config.instantly():
+            if self._upload_config.current_setting() == "Instantly":
+                self.shutdown_pag7936_camera()
                 self._network_manager.upload_mjpeg(filename)
-                self.print_memory_status("upload_mjpeg done")
+                self._tools.print_memory_status("upload_mjpeg done")
             # Return to thermal monitoring mode.
             self.reinit_lepton_camera()
 
@@ -307,11 +318,9 @@ class Camera:
         if self._buf_index == 0:
             # Run garbage collection after one complete buffer cycle to help
             # keep memory usage stable during long-running operation.
-            self.cleanup_memory()
+            self._tools.cleanup_memory()
             self._ring_buf_fil_count += 1
-            print("After ring buffer filled", self._ring_buf_fil_count)
-            print("Free:", gc.mem_free())
-            print("Allocated:", gc.mem_alloc())
+            self._tools.print_memory_status(f"After ring buffer filled {self._ring_buf_fil_count}")
 
     # Saves the current circular buffer as an MJPEG video.
     def save_buf_as_mjpeg(self):
@@ -420,14 +429,3 @@ class Camera:
             self._buffer[i] = None
         self._buf_index = 0
         self._last_frame_time = time.ticks_ms()
-
-    # Runs the MicroPython garbage collector.
-    def cleanup_memory(self):
-        gc.collect()
-
-    # Prints the current heap memory usage.
-    def print_memory_status(self, label):
-        self.cleanup_memory()
-        print(label)
-        print("Free:", gc.mem_free())
-        print("Allocated:", gc.mem_alloc())

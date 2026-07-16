@@ -1,5 +1,6 @@
 from src.NetworkConfig import NetworkConfig
 from src.UploadConfig import UploadConfig
+from src.Tools import Tools
 import network
 import time
 import ntptime
@@ -9,9 +10,12 @@ import os
 import socket
 import ssl
 
+import gc
+
 class NetworkManager:
     # Initializes the network manager.
     def __init__(self, file_manager):
+        self._tools = Tools()
         self._file_manager = file_manager
         self._upload_config = UploadConfig()
 
@@ -43,10 +47,10 @@ class NetworkManager:
         print("WiFi connected")
 
     def sync_time(self):
-        print("Updating date and time...")
+        #print("Updating date and time...")
         ntptime.settime()
-        print("Date and time updated")
-        print(time.localtime())
+        print("Date and time updated:", time.localtime())
+        #print(time.localtime())
 
 
     def scheduled_upload(self):
@@ -78,12 +82,16 @@ class NetworkManager:
         if files:
             for file in files:
                 filename = self._file_manager.motion_capture_dir() + "/" + file
+                self._tools.print_memory_status("Memory before upload")
                 if self.upload_mjpeg(filename):
                     #self._file_manager.delete_file(filename)
                     print(f"File deleted {filename}")
 
     # Uploads an MJPEG file to AWS S3 using a presigned URL.
     def upload_mjpeg(self, filename):
+        self._tools.cleanup_memory()
+        print("Waiting before upload")
+        time.sleep_ms(1000)
         # Request a presigned S3 upload URL and separate it into
         # the hostname and request path required for the HTTP request.
         upload_url = self.get_upload_url()
@@ -98,14 +106,21 @@ class NetworkManager:
         try:
             # Resolve the S3 hostname and establish a TCP connection
             # to the HTTPS port.
+            print("Resolving S3 address")
             address = socket.getaddrinfo(host, 443)[0][-1]
+            print("Creating socket")
             sock = socket.socket()
+            print("Connecting socket")
             sock.connect(address)
 
             # Encrypt the TCP connection with TLS.
             # server_hostname enables SNI so that S3 provides the
             # certificate matching the requested hostname
+            print("Starting TLS setup")
             tls_sock = ssl.wrap_socket(sock, server_hostname=host)
+            print("TLS setup completed")
+
+            self._tools.print_memory_status("Memory after TLS setup")
 
             # Build the HTTP PUT request header.
             # The presigned URL already contains the authentication
@@ -122,6 +137,10 @@ class NetworkManager:
             self.write_all(tls_sock, request_header.encode())
             upload_start_time = time.ticks_ms()
 
+
+            self._tools.print_memory_status("Memory before file streaming")
+            bytes_sent = 0
+            next_progress_print = 1024 * 1024
             # Stream the file directly from storage to S3 in blocks
             # instead of loading the complete MJPEG file into RAM.
             with open(filename, "rb") as file:
@@ -134,6 +153,11 @@ class NetworkManager:
                     # Ensure the complete block is written before reading
                     # and sending the next one.
                     self.write_all(tls_sock, chunk)
+                    bytes_sent += len(chunk)
+
+                    if bytes_sent >= next_progress_print:
+                        print("Uploaded KiB:", bytes_sent // 1024)
+                        next_progress_print += 1024 * 1024
 
             # Read the first line of the HTTP response, for example:
             # HTTP/1.1 200 OK
@@ -206,11 +230,8 @@ class NetworkManager:
     # bytes must be written until the whole buffer has been trasferred.
     def write_all(self, stream, data):
         offset = 0
-
         while offset < len(data):
             written = stream.write(data[offset:])
-
             if written is None or written <= 0:
                 raise OSError("Socket write failed")
-
             offset += written
