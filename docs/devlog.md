@@ -598,3 +598,11 @@ Implemented an AWS S3 event-driven processing pipeline for uploaded MJPEG videos
 - Generated a JSON results file containing frame metadata, detected labels, confidence values and bounding boxes.
 - Added a video-level detection summary that confirms repeated detections across multiple analyzed frames to reduce false positives.
 - Verified the complete end-to-end workflow from OpenMV upload to automatic AI analysis and JSON result generation in AWS.
+
+## 2026-07-16
+AWS Repository Improvements
+
+- Added the final AWS Lambda source code (`upload_handler.py`) to the repository to keep the cloud implementation under version control.
+- Added the default `upload_settings.json` configuration file to the repository for version-controlled AI processing settings and target species configuration.
+- Expanded the default target species configuration to include common Finnish wildlife together with generic animal and human detection labels.
+- Verified that the repository configuration matches the deployed AWS Lambda implementation.
