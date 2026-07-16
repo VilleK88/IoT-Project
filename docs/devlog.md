@@ -589,3 +589,12 @@ Implemented an AWS S3 event-driven processing pipeline for uploaded MJPEG videos
 - Shut down the PAG7936 camera before starting HTTPS uploads to release camera resources.
 - Verified stable MJPEG uploads after the camera shutdown change.
 - Confirmed that the original 16384-byte upload buffer operates reliably after shutting down the PAG7936 camera, making the previous chunk-size reduction unnecessary.
+
+## 2026-07-16
+- Completed the AWS serverless processing pipeline for uploaded MJPEG videos.
+- Configured Amazon S3 to automatically trigger an AWS Lambda function when a new MJPEG video is uploaded.
+- Implemented automatic MJPEG frame extraction and uploaded all extracted JPEG frames to S3.
+- Integrated Amazon Rekognition to analyze selected video frames for object detection.
+- Generated a JSON results file containing frame metadata, detected labels, confidence values and bounding boxes.
+- Added a video-level detection summary that confirms repeated detections across multiple analyzed frames to reduce false positives.
+- Verified the complete end-to-end workflow from OpenMV upload to automatic AI analysis and JSON result generation in AWS.
