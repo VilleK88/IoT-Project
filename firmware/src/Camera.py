@@ -6,8 +6,6 @@ import mjpeg
 import csi
 import machine
 import time
-import image
-import gc
 
 
 class Camera:
@@ -29,8 +27,6 @@ class Camera:
 
         # Motion detection settings
         self._mot_conf = MotionConfig()
-        self._triggered = False
-        self._frame_count = 0
         self._last_motion_check_time = time.ticks_ms()
 
         # RGB movement detection settings
@@ -48,7 +44,6 @@ class Camera:
         self._buffer = [None] * self._buf_config.buf_size()
         self._buf_index = 0
         self._last_frame_time = 0
-        self._buf_start_time = time.ticks_ms()
         self._frame_interval_ms = self._buf_config.frame_interval_ms()
         self._ring_buf_fil_count = 0
 
@@ -59,12 +54,6 @@ class Camera:
         self.csi0.framesize(csi.HD) # 1280x720
         self.csi0.snapshot(time=2000)  # Let new settings take effect.
         self.csi0.auto_whitebal(False)
-        """self._extra_fb = image.Image(self._mot_conf.motion_width(), self._mot_conf.motion_height(), csi.GRAYSCALE)
-
-        print("About to save background image...")
-        self.csi0.snapshot(time=2000)  # Give the user time to get ready.
-        self._extra_fb.draw_image(self.create_motion_frame(self.csi0.snapshot()))
-        print("Saved background image")"""
 
         # Thermal detection settings
         # Minimum grayscale value considered warm enough to belong to a thermal target.
@@ -85,8 +74,6 @@ class Camera:
         self.csi1.ioctl(csi.IOCTL_LEPTON_SET_MODE, True, True)
         self.csi1.ioctl(csi.IOCTL_LEPTON_SET_RANGE, self._min_temp_in_celsius, self._max_temp_in_celsius)
         self._tools.print_memory_status("After Lepton CSI config")
-        self._therm_frame_max_time_ms = 200
-        self._last_therm_frame_time = time.ticks_ms()
 
     # Reinitializes the PAG7936 RGB camera after switching from the
     # Lepton thermal camera.
@@ -107,45 +94,12 @@ class Camera:
         self.csi1.ioctl(csi.IOCTL_LEPTON_SET_MODE, True, True)
         self.csi1.ioctl(csi.IOCTL_LEPTON_SET_RANGE, self._min_temp_in_celsius, self._max_temp_in_celsius)
 
-        # Do not compare the new Lepton image against a frame captured
-        # before the RGB recording started.
-        self._last_hot_img = None
-        self._therm_detect_counter = 0
-
     # Shuts down the PAG7936 RGB camera before a blocking upload.
     def shutdown_pag7936_camera(self):
         print("Shutting down PAG7936 camera")
         self.csi0.shutdown(True)
         self._tools.cleanup_memory()
         self._tools.print_memory_status("After PAG7936 shutdown")
-
-    # Detects motion by comparing the current frame against the
-    # adaptive background image.
-    """def frame_differencing(self, frame):
-        # Create a smaller grayscale image for faster motion detection.
-        img = self.create_motion_frame(frame)
-        self._frame_count += 1
-        # Periodically update the adaptive background so it can gradually
-        # adapt to slow environmental changes such as lighting variations.
-        if self._frame_count > self._mot_conf.bg_upd_frames():
-            self._frame_count = 0
-            # Blend the current frame into the background image.
-            img.blend(self._extra_fb, alpha=(255 - self._mot_conf.bg_upd_blend()))
-            self._extra_fb.draw_image(img)
-        # Calculate the difference between the current frame and the
-        # adaptive background image.
-        img.difference(self._extra_fb)
-        # Estimate the amount of motion from the difference image.
-        hist = img.get_histogram()
-        diff = hist.get_percentile(0.99).l_value - hist.get_percentile(0.90).l_value
-        # Motion is detected when the measured difference exceeds the
-        # configured threshold.
-        self._triggered = diff > self._mot_conf.trig_thresh()
-        if self._triggered:
-            print("Movement detected, diff:", diff)
-        else:
-            print("Movement not detected, diff:", diff)
-        return self._triggered"""
 
     # Detects meaningful movement by comparing consecutive RGB frames
     # captured during the same recording session.
@@ -191,6 +145,7 @@ class Camera:
                 )
                 return True
         # No sufficiently large and plausible movement region was found.
+        print("No movement detected")
         return False
 
     # Returns True when it is time to perform the next motion check.
@@ -333,22 +288,6 @@ class Camera:
             video.write(frame)
             saved_frames += 1
         return saved_frames
-
-    # Calculates the amount of motion in a frame.
-    def get_motion_diff(self, frame):
-        # Convert the RGB frame into a smaller grayscale image for faster
-        # motion detection.
-        img = self.create_motion_frame(frame)
-        # Slowly blend the current frame into the adaptive background to
-        # compensate for gradual lighting changes.
-        img.blend(self._extra_fb, alpha=(255 - self._mot_conf.bg_upd_blend()))
-        self._extra_fb.draw_image(img)
-        # Compare the current frame against the updated background.
-        img.difference(self._extra_fb)
-        # Calculate the motion level from the difference image.
-        hist = img.get_histogram()
-        diff = hist.get_percentile(0.99).l_value - hist.get_percentile(0.90).l_value
-        return diff
 
     # Periodically captures thermal frames into the circular RAM buffer.
     def update_frame_buffer(self):

@@ -637,3 +637,14 @@ Recording Motion Detection Improvements
 * Added a maximum recording duration to prevent recordings from continuing indefinitely.
 * Simplified the recording logic and updated comments to match the new motion detection workflow.
 
+
+## 2026-07-21
+Removing Obsolete Code
+
+- Removed unused camera state variables left over from the previous motion detection implementation.
+- Removed obsolete thermal frame-difference variables that are no longer required by the blob-based thermal detector.
+- Removed unused adaptive background detection configuration values and their associated getter functions.
+- Removed obsolete timing, stabilization, debugging, and file counter configuration values from MotionConfig.
+- Removed unused imports from Camera and NetworkManager.
+- Simplified the codebase by removing legacy code that is no longer used by the current motion detection and recording pipeline.
+

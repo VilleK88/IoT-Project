@@ -7,12 +7,6 @@ class BufferConfig:
         self._buf_size = self._buf_sec * self._buf_fps # Total number of frames stored in the circular buffer
         self._frame_interval_ms = 1000 // self._buf_fps
 
-    def buf_sec(self):
-        return self._buf_sec
-
-    def buf_fps(self):
-        return self._buf_fps
-
     def buf_size(self):
         return self._buf_size
 
