@@ -627,3 +627,13 @@ Thermal Blob Detection
 * Refactored the thermal detection logic into separate warm region and blob detection functions to improve readability and maintainability.
 * Documented all thermal detection thresholds with comments explaining the grayscale-to-temperature mapping and blob filtering parameters.
 
+
+## 2026-07-21
+Recording Motion Detection Improvements
+
+* Replaced the RGB recording motion detection with blob-based frame differencing using find_blobs().
+* Added configurable blob size thresholds to filter out small noise and large scene-wide changes.
+* Added a configurable no-motion timeout to keep recording while wildlife temporarily stops moving.
+* Added a maximum recording duration to prevent recordings from continuing indefinitely.
+* Simplified the recording logic and updated comments to match the new motion detection workflow.
+

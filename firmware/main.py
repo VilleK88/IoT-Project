@@ -18,7 +18,7 @@ while True:
     if camera.should_check_motion():
         if camera.thermal_detection():
             print("camera.record_video()")
-            #camera.record_video()
+            camera.record_video()
 
     if network_manager.should_upload():
         network_manager.scheduled_upload()

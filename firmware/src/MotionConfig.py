@@ -16,6 +16,8 @@ class MotionConfig:
         self._stab_frame_delay_ms = 20  # Delay between stabilization frames (ms)
         self._init_file_num = -1  # Initial file counter value
 
+        self._motion_timeout_ms = 5000  # 5 seconds
+
     def trig_thresh(self):
         return self._trig_thresh
 
@@ -60,3 +62,6 @@ class MotionConfig:
 
     def init_file_num(self):
         return self._init_file_num
+
+    def motion_timeout_ms(self):
+        return self._motion_timeout_ms
