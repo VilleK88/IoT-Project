@@ -617,3 +617,13 @@ AWS Processing Metadata Storage
 - Chose DynamoDB because it provides fast key-based lookups, scales automatically, requires no server management and is well suited for tracking the processing state of individual uploaded videos.
 - Verified successful end-to-end integration between AWS Lambda and DynamoDB by confirming that processed videos automatically create metadata records.
 
+
+## 2026-07-21
+Thermal Blob Detection
+
+* Replaced the previous binary frame-difference based thermal detection with blob-based thermal target detection.
+* Added a warm-region check that verifies the hottest area is significantly warmer than the average scene temperature before blob detection.
+* Added configurable blob size thresholds to filter small thermal noise and reject excessively large warm background regions.
+* Refactored the thermal detection logic into separate warm region and blob detection functions to improve readability and maintainability.
+* Documented all thermal detection thresholds with comments explaining the grayscale-to-temperature mapping and blob filtering parameters.
+

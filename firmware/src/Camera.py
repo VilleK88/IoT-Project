@@ -43,8 +43,8 @@ class Camera:
         self._ring_buf_fil_count = 0
 
         # Initialize the OpenMV N6 PAG7936 CSI camera
-        self.csi0 = csi.CSI()
-        self.csi0.reset()
+        self.csi0 = csi.CSI()  # Create a new CSI camera object.
+        self.csi0.reset()  # Initialize and reset the connected camera sensor.
         self.csi0.pixformat(csi.RGB565)
         self.csi0.framesize(csi.HD) # 640x480
         self.csi0.snapshot(time=2000)  # Let new settings take effect.
@@ -57,11 +57,13 @@ class Camera:
         print("Saved background image")
 
         # Thermal detection settings
-        self._threshold_list = [(100, 255)]
-        self._min_temp_in_celsius = 20.0
-        self._max_temp_in_celsius = 40.0
-        self._therm_detect_counter = 0
-        self._last_hot_img = None
+        # Minimum grayscale value considered warm enough to belong to a thermal target.
+        self._threshold_list = [(100, 255)]  # 20 + (100 / 255 * 20) = 27.8 °C
+        self._min_temp_in_celsius = 20.0  # Minimum temperature represented by grayscale value 0.
+        self._max_temp_in_celsius = 40.0  # Maximum temperature represented by grayscale value 255.
+        self.min_blob_pixels = 60  # Minimum number of hot pixels required for a blob to be considered a valid target.
+        self.min_blob_area = 100  # Minimum blob bounding box area required for a valid target.
+        self._max_blob_pixels = int(160 * 120 * 0.40)  # Reject blobs covering more than 40% of the thermal frame.
 
         # Initialize the OpenMV N6 Lepton CSI camera interface
         self.csi1 = csi.CSI(cid=csi.LEPTON)
@@ -82,6 +84,7 @@ class Camera:
         self.csi0.reset()
         self.csi0.pixformat(csi.RGB565)
         self.csi0.framesize(csi.HD)
+        self.csi0.auto_whitebal(True)
 
     # Reinitializes the Lepton thermal camera after RGB recording ends.
     # The startup snapshot allows the thermal image to stabilize.
@@ -93,6 +96,11 @@ class Camera:
         # Enable measurement mode
         self.csi1.ioctl(csi.IOCTL_LEPTON_SET_MODE, True, True)
         self.csi1.ioctl(csi.IOCTL_LEPTON_SET_RANGE, self._min_temp_in_celsius, self._max_temp_in_celsius)
+
+        # Do not compare the new Lepton image against a frame captured
+        # before the RGB recording started.
+        self._last_hot_img = None
+        self._therm_detect_counter = 0
 
     # Shuts down the PAG7936 RGB camera before a blocking upload.
     def shutdown_pag7936_camera(self):
@@ -232,20 +240,15 @@ class Camera:
 
     # Enables the hardware and camera settings required for recording.
     def start_recording_state(self):
-        # Turn on the recording status LED.
-        self._led.on()
-        # Enable automatic white balance for improved image quality.
-        self.csi0.auto_whitebal(True)
+        self._led.on()  # Turn on the recording status LED.
+        self.csi0.auto_whitebal(True)  # Enable automatic white balance for improved image quality.
 
     # Restores the camera state after recording has finished.
     def stop_recording_state(self):
         # Remove any buffered frames so the next recording starts with
-        # a fresh circular buffer.
-        self.clear_frame_buffer()
-        # Turn off the recording status LED.
-        self._led.off()
-        # Restore the default white balance setting used outside recording.
-        self.csi0.auto_whitebal(False)
+        self.clear_frame_buffer()  # a fresh circular buffer.
+        self._led.off()  # Turn off the recording status LED.
+        self.csi0.auto_whitebal(False)  # Restore the default white balance setting used outside recording.
 
     # Writes the buffered frames to the MJPEG file.
     # New thermal frames are sampled while writing to avoid a capture gap.
@@ -391,36 +394,45 @@ class Camera:
     # Detects moving warm objects using the Lepton thermal camera.
     def thermal_detection(self):
         img = self._current_frame
+        # Continue only if the frame contains a region significantly warmer
+        # than the average scene temperature.
+        if self.warm_region(img):
+            # Search for warm regions that match the configured blob limits.
+            if self.detect_warm_blobs(img):
+                return True
+        return False
 
-        # Estimate the hottest and average temperatures in the frame
+    # Returns True when the frame contains a sufficiently warm region.
+    def warm_region(self, img):
+        # Estimate the hottest and average temperatures in the frame.
         stats = img.get_statistics()
         max_temp = self.map_g_to_temp(stats.max)
         mean_temp = self.map_g_to_temp(stats.mean)
-
-        # Continue only if a significantly warmer region exists
+        # Require the hottest point to be significantly warmer than the
+        # average scene temperature.
         if max_temp - mean_temp > 6.0:
-            # Create a binary image where only hot pixels remain
-            hot_img = img.copy()
-            hot_img.binary(self._threshold_list)
+            return True
+        return False
 
-            # Compare against the previous binary thermal frame to detect movement
-            if self._last_hot_img is not None:
-                diff_img = hot_img.copy()
-                diff_img.difference(self._last_hot_img)
-                diff_stats = diff_img.get_statistics()
-
-                # Any non-zero difference means the hot target has moved
-                if diff_stats.max > 0:
-                    print("warm target moving", self._therm_detect_counter)
-                    return True
-
-            # Save the current binary frame for the next comparison
-            self._therm_detect_counter += 1
-            self._last_hot_img = hot_img
-        else:
-            # Clear the previous frame when no warm target is present
-            self._last_hot_img = None
-
+    # Searches for warm blobs that could represent an animal.
+    def detect_warm_blobs(self, img):
+        for blob in img.find_blobs(
+            self._threshold_list,
+                pixels_threshold=self.min_blob_pixels,
+                area_threshold=self.min_blob_area,
+                merge=True
+        ):
+            # Draw the detected warm blob for debugging.
+            img.draw_detection(blob, color1=127)
+            img.flush()
+            # Ignore blobs that are unrealistically large, such as a warm wall
+            # or another large heated background region.
+            if blob.pixels < self._max_blob_pixels:
+                print("Target found")
+                return True
+            else:
+                return False
+        img.flush()
         return False
 
     # Clears the circular frame buffer after recording.

@@ -32,7 +32,7 @@ class NetworkManager:
     def initialize(self):
         self.connect()
         self.sync_time()
-        self.upload_mjpeg_files()
+        #self.upload_mjpeg_files()
 
     # Connects the device to the configured WiFi network.
     def connect(self):

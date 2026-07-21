@@ -14,10 +14,11 @@ camera = Camera(storage_config, file_manager, network_manager)
 
 while True:
     camera.update_frame_buffer()
-
-    if camera.should_check_motion:
+    
+    if camera.should_check_motion():
         if camera.thermal_detection():
-            camera.record_video()
+            print("camera.record_video()")
+            #camera.record_video()
 
     if network_manager.should_upload():
         network_manager.scheduled_upload()

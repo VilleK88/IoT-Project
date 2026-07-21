@@ -4,7 +4,7 @@ class UploadConfig:
             [0, 0], [12, 0]
         ]
         self._settings = [
-            ["Instantly", True], ["Hourly", False],
+            ["Instantly", False], ["Hourly", False],
             ["Twice per day", False],
             ["Once per day", False]
         ]
