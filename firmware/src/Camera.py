@@ -53,22 +53,23 @@ class Camera:
         self.csi0.pixformat(csi.RGB565)
         self.csi0.framesize(csi.HD) # 1280x720
         self.csi0.snapshot(time=2000)  # Let new settings take effect.
-        self.csi0.auto_whitebal(False)
+        self.csi0.auto_whitebal(True)
 
         # Thermal detection settings
         # Minimum grayscale value considered warm enough to belong to a thermal target.
-        self._threshold_list = [(100, 255)]  # 20 + (100 / 255 * 20) = 27.8 °C
+        self._threshold_list = [(50, 255)]  # 20 + (40 / 255 × 20) ≈ 23,1 °C
         self._min_temp_in_celsius = 20.0  # Minimum temperature represented by grayscale value 0.
         self._max_temp_in_celsius = 40.0  # Maximum temperature represented by grayscale value 255.
-        self._min_blob_pixels = 60  # Minimum number of hot pixels required for a blob to be considered a valid target.
-        self._min_blob_area = 100  # Minimum blob bounding box area required for a valid target.
+        self._min_temp_diff = 2
+        self._min_blob_pixels = 3  # Minimum number of hot pixels required for a blob to be considered a valid target.
+        self._min_blob_area = 4  # Minimum blob bounding box area required for a valid target.
         self._max_blob_pixels = int(160 * 120 * 0.40)  # Reject blobs covering more than 40% of the thermal frame.
 
         # Initialize the OpenMV N6 Lepton CSI camera interface
         self.csi1 = csi.CSI(cid=csi.LEPTON)
         self.csi1.reset()  # Reset and initialize the sensor
         self.csi1.pixformat(csi.GRAYSCALE)  # Set pixel format to RGB565 (or GRAYSCALE)
-        self.csi1.framesize(csi.QQVGA)  # Set frame size to QQVGA (160×120)
+        self.csi1.framesize(csi.QVGA)  # Set frame size to QQVGA (160×120)
         self._current_frame = self.csi1.snapshot(time=5000) # Let new settings take effect.
         # Enable measurement mode
         self.csi1.ioctl(csi.IOCTL_LEPTON_SET_MODE, True, True)
@@ -405,7 +406,7 @@ class Camera:
         mean_temp = self.map_g_to_temp(stats.mean)
         # Require the hottest point to be significantly warmer than the
         # average scene temperature.
-        if max_temp - mean_temp > 6.0:
+        if max_temp - mean_temp > self._min_temp_diff:
             return True
         return False
 
@@ -417,6 +418,9 @@ class Camera:
                 area_threshold=self._min_blob_area,
                 merge=True
         ):
+            print("Blob:", "pixels:", blob.pixels,
+                "area:", blob.area, "w:", blob.w, "h:", blob.h
+            )
             # Draw the detected warm blob for debugging.
             img.draw_detection(blob, color1=127)
             img.flush()

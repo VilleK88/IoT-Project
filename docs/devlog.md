@@ -648,3 +648,14 @@ Removing Obsolete Code
 - Removed unused imports from Camera and NetworkManager.
 - Simplified the codebase by removing legacy code that is no longer used by the current motion detection and recording pipeline.
 
+
+## 2026-07-22
+Improved thermal wildlife detection range
+
+- Tuned the thermal detection parameters for significantly longer detection range.
+- Reduced the minimum thermal contrast threshold from 6°C to 2°C while maintaining stable operation.
+- Experimented with multiple thermal grayscale thresholds to evaluate detection distance.
+- Determined that a thermal threshold of (50, 255) provides the best balance between detection range and false positives.
+- Verified reliable human detection from approximately 10 meters, even while wearing a hoodie.
+- Added blob debugging output to inspect detected thermal target size during field testing.
+- Confirmed that distant targets can be detected as small as a 2×2 pixel thermal blob, allowing very small warm targets to trigger recording.
