@@ -69,7 +69,7 @@ class Camera:
         self.csi1 = csi.CSI(cid=csi.LEPTON)
         self.csi1.reset()  # Reset and initialize the sensor
         self.csi1.pixformat(csi.GRAYSCALE)  # Set pixel format to RGB565 (or GRAYSCALE)
-        self.csi1.framesize(csi.QVGA)  # Set frame size to QQVGA (160×120)
+        self.csi1.framesize(csi.QVGA)  # Set frame size to QQVGA (320×240)
         self._current_frame = self.csi1.snapshot(time=5000) # Let new settings take effect.
         # Enable measurement mode
         self.csi1.ioctl(csi.IOCTL_LEPTON_SET_MODE, True, True)
@@ -89,7 +89,7 @@ class Camera:
     def reinit_lepton_camera(self):
         self.csi1.reset()  # Reset and initialize the sensor
         self.csi1.pixformat(csi.GRAYSCALE)  # Set pixel format to RGB565 (or GRAYSCALE)
-        self.csi1.framesize(csi.QQVGA)  # Set frame size to QQVGA (160×120)
+        self.csi1.framesize(csi.QVGA)  # Set frame size to QQVGA (320×240)
         self._current_frame = self.csi1.snapshot(time=5000)
         # Enable measurement mode
         self.csi1.ioctl(csi.IOCTL_LEPTON_SET_MODE, True, True)
