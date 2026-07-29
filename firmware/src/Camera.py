@@ -110,10 +110,10 @@ class Camera:
         current_frame = self.create_motion_frame(frame)
 
         # The first frame cannot be compared against anything yet, so store it
-        # as the reference frame and keep the recording active.
+        # as the reference frame. No movement has been detected yet.
         if self._previous_motion_frame is None:
             self._previous_motion_frame = current_frame
-            return True
+            return False
 
         # Create a difference image where unchanged pixels become dark and
         # pixels whose brightness changed become brighter.

@@ -659,3 +659,12 @@ Improved thermal wildlife detection range
 - Verified reliable human detection from approximately 10 meters, even while wearing a hoodie.
 - Added blob debugging output to inspect detected thermal target size during field testing.
 - Confirmed that distant targets can be detected as small as a 2×2 pixel thermal blob, allowing very small warm targets to trigger recording.
+
+## 2026-07-29
+Fix RGB motion detection first-frame logic
+
+- Fixed a logic bug in RGB motion detection where the first frame of a recording incorrectly returned a movement detection.
+- Changed the first-frame handling to return False because no previous frame exists for comparison.
+- Clarified the comments to distinguish initialization from actual movement detection.
+- Prevented the recording logic from refreshing the last-motion timestamp before a valid frame comparison is possible.
+
