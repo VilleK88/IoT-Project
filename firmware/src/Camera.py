@@ -144,6 +144,7 @@ class Camera:
                     "pixels:", blob.pixels,
                     "area:", blob.area
                 )
+                print("Movement detected")
                 return True
         # No sufficiently large and plausible movement region was found.
         print("No movement detected")
