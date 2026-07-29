@@ -3,6 +3,7 @@ from src.BufferConfig import BufferConfig
 from src.UploadConfig import UploadConfig
 from src.Tools import Tools
 import mjpeg
+import image
 import csi
 import machine
 import time
@@ -51,49 +52,40 @@ class Camera:
         self.csi0 = csi.CSI()  # Create a new CSI camera object.
         self.csi0.reset()  # Initialize and reset the connected camera sensor.
         self.csi0.pixformat(csi.RGB565)
-        self.csi0.framesize(csi.HD) # 1280x720
-        self.csi0.snapshot(time=2000)  # Let new settings take effect.
+        self.csi0.framesize(csi.VGA) # 640x480
+        self._current_frame = self.csi0.snapshot(time=2000)  # Let new settings take effect.
         self.csi0.auto_whitebal(True)
 
         # Thermal detection settings
         # Minimum grayscale value considered warm enough to belong to a thermal target.
-        self._threshold_list = [(50, 255)]  # 20 + (40 / 255 × 20) ≈ 23,1 °C
+        self._threshold_list = [(100, 255)]  # 20 + (40 / 255 × 20) ≈ 23,1 °C
         self._min_temp_in_celsius = 20.0  # Minimum temperature represented by grayscale value 0.
         self._max_temp_in_celsius = 40.0  # Maximum temperature represented by grayscale value 255.
         self._min_temp_diff = 2
-        self._min_blob_pixels = 3  # Minimum number of hot pixels required for a blob to be considered a valid target.
-        self._min_blob_area = 4  # Minimum blob bounding box area required for a valid target.
+        self._min_blob_pixels = 20  # Minimum number of hot pixels required for a blob to be considered a valid target.
+        self._min_blob_area = 20  # Minimum blob bounding box area required for a valid target.
         self._max_blob_pixels = int(160 * 120 * 0.40)  # Reject blobs covering more than 40% of the thermal frame.
 
         # Initialize the OpenMV N6 Lepton CSI camera interface
         self.csi1 = csi.CSI(cid=csi.LEPTON)
-        self.csi1.reset()  # Reset and initialize the sensor
+        self.csi1.reset(hard=False)  # Reset and initialize the sensor
         self.csi1.pixformat(csi.GRAYSCALE)  # Set pixel format to RGB565 (or GRAYSCALE)
-        self.csi1.framesize(csi.QVGA)  # Set frame size to QQVGA (320×240)
-        self._current_frame = self.csi1.snapshot(time=5000) # Let new settings take effect.
+        self.csi1.framesize(csi.QQVGA)  # Set frame size to QQVGA (160x120)
         # Enable measurement mode
         self.csi1.ioctl(csi.IOCTL_LEPTON_SET_MODE, True, True)
         self.csi1.ioctl(csi.IOCTL_LEPTON_SET_RANGE, self._min_temp_in_celsius, self._max_temp_in_celsius)
+
+        self.csi1.snapshot(time=5000) # Let new settings take effect.
+        self._extra_fb = image.Image(self.csi1.width(), self.csi1.height(), self.csi1.pixformat())
+        print("About to save background image...")
+        self._extra_fb.draw_image(self.csi1.snapshot())
+        print("Saved background image - Now frame differencing!")
+        self._triggered = False
+        self._frame_count = 0
+        self._trigger_threshold = 5
+        self._bg_update_frames = 5
+        self._bg_update_blend = 128
         self._tools.print_memory_status("After Lepton CSI config")
-
-    # Reinitializes the PAG7936 RGB camera after switching from the
-    # Lepton thermal camera.
-    def reinit_pag7936_camera(self):
-        self.csi0.reset()
-        self.csi0.pixformat(csi.RGB565)
-        self.csi0.framesize(csi.HD)
-        self.csi0.auto_whitebal(True)
-
-    # Reinitializes the Lepton thermal camera after RGB recording ends.
-    # The startup snapshot allows the thermal image to stabilize.
-    def reinit_lepton_camera(self):
-        self.csi1.reset()  # Reset and initialize the sensor
-        self.csi1.pixformat(csi.GRAYSCALE)  # Set pixel format to RGB565 (or GRAYSCALE)
-        self.csi1.framesize(csi.QVGA)  # Set frame size to QQVGA (320×240)
-        self._current_frame = self.csi1.snapshot(time=5000)
-        # Enable measurement mode
-        self.csi1.ioctl(csi.IOCTL_LEPTON_SET_MODE, True, True)
-        self.csi1.ioctl(csi.IOCTL_LEPTON_SET_RANGE, self._min_temp_in_celsius, self._max_temp_in_celsius)
 
     # Shuts down the PAG7936 RGB camera before a blocking upload.
     def shutdown_pag7936_camera(self):
@@ -104,10 +96,10 @@ class Camera:
 
     # Detects meaningful movement by comparing consecutive RGB frames
     # captured during the same recording session.
-    def detect_motion(self, frame):
+    def detect_motion(self):
         # Convert the full-resolution RGB frame into a smaller grayscale image
         # to reduce memory usage and speed up movement detection.
-        current_frame = self.create_motion_frame(frame)
+        current_frame = self.create_motion_frame(self._current_frame)
 
         # The first frame cannot be compared against anything yet, so store it
         # as the reference frame. No movement has been detected yet.
@@ -133,9 +125,9 @@ class Camera:
                 self._threshold_list,
                 pixels_threshold=self._motion_min_blob_pixels,
                 area_threshold=self._motion_min_blob_area,
-                merge=True
+                merge=False
         ):
-            frame.draw_detection(blob, color1=127)
+            current_frame.draw_detection(blob, color1=127)
             # Reject changes that cover an unrealistically large part of the frame,
             # because they are more likely caused by camera shake or lighting changes.
             if blob.pixels < self._motion_max_blob_pixels:
@@ -193,7 +185,7 @@ class Camera:
             # Save the buffered thermal frames before switching to the RGB camera.
             saved_frames = self.write_prebuffer_with_catchup(video)
             # Switch from the Lepton thermal camera to the PAG7936 RGB camera.
-            self.reinit_pag7936_camera()
+            self.csi0.framesize(csi.HD)  # 1280x720
             last_live_frame_time = time.ticks_ms()
             last_motion_check = time.ticks_ms()
             recording_start_time = time.ticks_ms()
@@ -205,13 +197,15 @@ class Camera:
                 if time.ticks_diff(now, last_live_frame_time) >= self._frame_interval_ms:
                     last_live_frame_time = now
                     img = self.csi0.snapshot()  # Capture the next RGB frame.
+                    self._current_frame = img
                     video.write(img)  # Append the frame to the MJPEG video.
                     saved_frames += 1
                     # Check for movement at the configured interval.
-                    if time.ticks_diff(now, last_motion_check) >= self._mot_conf.rec_chk_int_ms():
+                    if time.ticks_diff(now, last_motion_check) >= self._mot_conf.chk_mot_ms():
                         last_motion_check = now
                         # Reset the no-motion timer whenever movement is detected.
-                        if self.detect_motion(img):
+                        if self.thermal_frame_differencing():
+                            print("Movement detected")
                             last_motion_time = now
                         # Stop recording after the configured period without movement.
                         elif time.ticks_diff(now, last_motion_time) >= self._mot_conf.motion_timeout_ms():
@@ -228,11 +222,10 @@ class Camera:
             self._tools.print_memory_status("record_video_with_prebuffer done")
             # Upload the recording immediately if configured.
             if self._upload_config.current_setting() == "Instantly":
-                self.shutdown_pag7936_camera()
                 self._network_manager.upload_mjpeg(filename)
                 self._tools.print_memory_status("upload_mjpeg done")
             # Return to thermal monitoring mode.
-            self.reinit_lepton_camera()
+            self.csi0.framesize(csi.VGA)  # 640x480
 
     # Creates a new MJPEG file for motion recording.
     def create_motion_video(self):
@@ -281,7 +274,7 @@ class Camera:
             # compensate for the time spent saving the pre-buffer.
             now = time.ticks_ms()
             if time.ticks_diff(now, last_live_frame_time) >= self._frame_interval_ms:
-                self._current_frame = self.csi1.snapshot()
+                self._current_frame = self.csi0.snapshot()
                 catchup_frames.append(self._current_frame.copy())
                 last_live_frame_time = now
         # Append the frames captured during the pre-buffer write so the
@@ -298,8 +291,7 @@ class Camera:
         # This keeps the buffer at a fixed frame rate regardless of the main loop speed.
         if time.ticks_diff(now, self._last_frame_time) >= self._buf_config.frame_interval_ms():
             # Capture the latest frame from the Lepton thermal camera.
-            self._current_frame = self.csi1.snapshot()
-            self._current_frame.flush()
+            self._current_frame = self.csi0.snapshot()
             # Store a copy of the current frame in the circular buffer.
             # A copy is required because snapshot() reuses the same image buffer.
             self.save_frame(self._current_frame.copy())
@@ -388,50 +380,18 @@ class Camera:
     def map_g_to_temp(self, g):
         return ((g * (self._max_temp_in_celsius - self._min_temp_in_celsius)) / 255.0) + self._min_temp_in_celsius
 
-    # Detects moving warm objects using the Lepton thermal camera.
-    def thermal_detection(self):
-        img = self._current_frame
-        # Continue only if the frame contains a region significantly warmer
-        # than the average scene temperature.
-        if self.warm_region(img):
-            # Search for warm regions that match the configured blob limits.
-            if self.detect_warm_blobs(img):
-                return True
-        return False
-
-    # Returns True when the frame contains a sufficiently warm region.
-    def warm_region(self, img):
-        # Estimate the hottest and average temperatures in the frame.
-        stats = img.get_statistics()
-        max_temp = self.map_g_to_temp(stats.max)
-        mean_temp = self.map_g_to_temp(stats.mean)
-        # Require the hottest point to be significantly warmer than the
-        # average scene temperature.
-        if max_temp - mean_temp > self._min_temp_diff:
-            return True
-        return False
-
-    # Searches for warm blobs that could represent an animal.
-    def detect_warm_blobs(self, img):
-        for blob in img.find_blobs(
-            self._threshold_list,
-                pixels_threshold=self._min_blob_pixels,
-                area_threshold=self._min_blob_area,
-                merge=True
-        ):
-            print("Blob:", "pixels:", blob.pixels,
-                "area:", blob.area, "w:", blob.w, "h:", blob.h
-            )
-            # Draw the detected warm blob for debugging.
-            img.draw_detection(blob, color1=127)
-            img.flush()
-            # Ignore blobs that are unrealistically large, such as a warm wall
-            # or another large heated background region.
-            if blob.pixels < self._max_blob_pixels:
-                print("Target found")
-                return True
-        img.flush()
-        return False
+    def thermal_frame_differencing(self):
+        img = self.csi1.snapshot()
+        self._frame_count += 1
+        if self._frame_count > self._bg_update_frames:
+            self._frame_count = 0
+            img.blend(self._extra_fb, alpha=(255 - self._bg_update_blend))
+            self._extra_fb.draw_image(img)
+        img.difference(self._extra_fb)
+        hist = img.get_histogram()
+        diff = hist.get_percentile(0.99).l_value - hist.get_percentile(0.90).l_value
+        self._triggered = diff > self._trigger_threshold
+        return self._triggered
 
     # Clears the circular frame buffer after recording.
     def clear_frame_buffer(self):

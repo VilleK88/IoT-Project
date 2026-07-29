@@ -668,3 +668,13 @@ Fix RGB motion detection first-frame logic
 - Clarified the comments to distinguish initialization from actual movement detection.
 - Prevented the recording logic from refreshing the last-motion timestamp before a valid frame comparison is possible.
 
+
+## 2026-07-29
+Dual-camera thermal motion detection
+
+- Enabled simultaneous PAG7936 and Lepton operation using a soft Lepton reset (`hard=False`).
+- Kept PAG7936 capturing RGB frames into the circular frame buffer while using the Lepton exclusively for thermal motion detection.
+- Switched thermal detection to native 160×120 frame differencing with an adaptive background image.
+- Replaced the previous thermal detection algorithm with histogram percentile-based frame differencing for more reliable movement detection.
+- Configured thermal motion detection to run at 5 Hz and tuned the background update interval for faster recovery after movement.
+

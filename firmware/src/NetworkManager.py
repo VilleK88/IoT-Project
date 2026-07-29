@@ -47,10 +47,8 @@ class NetworkManager:
         print("WiFi connected")
 
     def sync_time(self):
-        #print("Updating date and time...")
         ntptime.settime()
         print("Date and time updated:", time.localtime())
-        #print(time.localtime())
 
 
     def scheduled_upload(self):
