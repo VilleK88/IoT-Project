@@ -678,3 +678,12 @@ Dual-camera thermal motion detection
 - Replaced the previous thermal detection algorithm with histogram percentile-based frame differencing for more reliable movement detection.
 - Configured thermal motion detection to run at 5 Hz and tuned the background update interval for faster recovery after movement.
 
+
+## 2026-07-30
+Corrected MJPEG recording resolution
+
+- Added explicit 1280×800 dimensions when initializing the MJPEG file.
+- Fixed MJPEG initialization so live recording now starts directly at 1280×800 resolution.
+- Added a reusable 1280×800 RGB565 frame for scaling buffered frames without repeated large memory allocations.
+- Scaled all buffered and catch-up frames to 1280×800 before writing them to the MJPEG file.
+- Verified that the generated MJPEG videos contain 1280×800 frames and preserve the correct playback duration.

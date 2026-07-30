@@ -87,12 +87,9 @@ class Camera:
         self._bg_update_blend = 128
         self._tools.print_memory_status("After Lepton CSI config")
 
-    # Shuts down the PAG7936 RGB camera before a blocking upload.
-    def shutdown_pag7936_camera(self):
-        print("Shutting down PAG7936 camera")
-        self.csi0.shutdown(True)
-        self._tools.cleanup_memory()
-        self._tools.print_memory_status("After PAG7936 shutdown")
+        # Reusable 1280x800 RGB565 frame used for scaling pre-buffer frames.
+        # Allocate it before the circular buffer fragments the heap.
+        self._scaled_frame = image.Image(1280, 800, csi.RGB565)
 
     # Detects meaningful movement by comparing consecutive RGB frames
     # captured during the same recording session.
@@ -179,13 +176,11 @@ class Camera:
         self._tools.print_memory_status("Before recording with prebuffer")
         # Create a new MJPEG file and prepare the camera for recording.
         filename, video = self.create_motion_video()
-        self.start_recording_state()
         saved_frames = 0
         try:
             # Save the buffered thermal frames before switching to the RGB camera.
             saved_frames = self.write_prebuffer_with_catchup(video)
-            # Switch from the Lepton thermal camera to the PAG7936 RGB camera.
-            self.csi0.framesize(csi.HD)  # 1280x720
+            self.start_recording_state()
             last_live_frame_time = time.ticks_ms()
             last_motion_check = time.ticks_ms()
             recording_start_time = time.ticks_ms()
@@ -197,6 +192,7 @@ class Camera:
                 if time.ticks_diff(now, last_live_frame_time) >= self._frame_interval_ms:
                     last_live_frame_time = now
                     img = self.csi0.snapshot()  # Capture the next RGB frame.
+                    print("Captured frame:", img.width(), img.height())
                     self._current_frame = img
                     video.write(img)  # Append the frame to the MJPEG video.
                     saved_frames += 1
@@ -205,14 +201,13 @@ class Camera:
                         last_motion_check = now
                         # Reset the no-motion timer whenever movement is detected.
                         if self.thermal_frame_differencing():
-                            print("Movement detected")
                             last_motion_time = now
                         # Stop recording after the configured period without movement.
                         elif time.ticks_diff(now, last_motion_time) >= self._mot_conf.motion_timeout_ms():
                             break
         finally:
             video.close() # Always close the MJPEG file, even if recording exits unexpectedly.
-            self.stop_recording_state() # Restore the default camera state after recording.
+            self._led.off()  # Turn off the recording status LED.
             # Update the MJPEG timing so playback matches the original capture rate.
             duration_ms = saved_frames * self._frame_interval_ms
             self._file_manager.patch_mjpeg_timing(filename, saved_frames, duration_ms)
@@ -224,8 +219,7 @@ class Camera:
             if self._upload_config.current_setting() == "Instantly":
                 self._network_manager.upload_mjpeg(filename)
                 self._tools.print_memory_status("upload_mjpeg done")
-            # Return to thermal monitoring mode.
-            self.csi0.framesize(csi.VGA)  # 640x480
+            self.stop_recording_state()  # Restore the default camera state after recording.
 
     # Creates a new MJPEG file for motion recording.
     def create_motion_video(self):
@@ -241,10 +235,12 @@ class Camera:
         self._file_manager.increase_video_count()
         print("Recording:", filename)
         # Create and return the MJPEG video object.
-        return filename, mjpeg.Mjpeg(filename)
+        return filename, mjpeg.Mjpeg(filename, width=1280, height=800)
 
     # Enables the hardware and camera settings required for recording.
     def start_recording_state(self):
+        self.csi0.framesize(csi.HD)  # 1280x800
+        print("CSI resolution:", self.csi0.width(), self.csi0.height())
         self._led.on()  # Turn on the recording status LED.
         self.csi0.auto_whitebal(True)  # Enable automatic white balance for improved image quality.
 
@@ -253,8 +249,8 @@ class Camera:
         # Remove any buffered frames so the next recording starts with
         self.clear_frame_buffer()  # a fresh circular buffer.
         self._previous_motion_frame = None
-        self._led.off()  # Turn off the recording status LED.
         self.csi0.auto_whitebal(False)  # Restore the default white balance setting used outside recording.
+        self.csi0.framesize(csi.VGA)  # 640x480
 
     # Writes the buffered frames to the MJPEG file.
     # New thermal frames are sampled while writing to avoid a capture gap.
@@ -268,7 +264,8 @@ class Camera:
         catchup_frames = []
         # Write the buffered frames to the MJPEG file.
         for frame in prebuf_frames:
-            video.write(frame)
+            scaled_frame = self.scale_frame(frame)
+            video.write(scaled_frame)
             saved_frames += 1
             # Periodically capture a new thermal frame while writing to
             # compensate for the time spent saving the pre-buffer.
@@ -280,9 +277,15 @@ class Camera:
         # Append the frames captured during the pre-buffer write so the
         # transition from buffered video to live recording is as seamless as possible.
         for frame in catchup_frames:
-            video.write(frame)
+            scaled_frame = self.scale_frame(frame)
+            video.write(scaled_frame)
             saved_frames += 1
         return saved_frames
+
+    def scale_frame(self, frame):
+        self._scaled_frame.draw_image(frame, x_scale=2.0, y_scale=2.0)
+        print("Scaled:", self._scaled_frame.width(), self._scaled_frame.height())
+        return self._scaled_frame
 
     # Periodically captures thermal frames into the circular RAM buffer.
     def update_frame_buffer(self):
