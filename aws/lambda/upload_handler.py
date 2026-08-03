@@ -1118,39 +1118,23 @@ def process_mjpeg_record(record):
 
     finally:
         # Always remove the temporary MJPEG file.
-        if os.path.exists(
-            local_mjpeg_path
-        ):
-            os.remove(
-                local_mjpeg_path
-            )
+        if os.path.exists(local_mjpeg_path):
+            os.remove(local_mjpeg_path)
 
 
 # AWS Lambda entry point.
 def lambda_handler(event, context):
     processed_files = []
 
-    for record in event.get(
-        "Records",
-        []
-    ):
+    for sqs_record in event.get("Records", []):
         try:
-            processed_file = (
-                process_mjpeg_record(
-                    record
-                )
-            )
-
-            processed_files.append(
-                processed_file
-            )
+            s3_event = json.loads(sqs_record["body"])
+            for s3_record in s3_event.get("Records", []):
+                processed_file = (process_mjpeg_record(s3_record))
+                processed_files.append(processed_file)
 
         except Exception as error:
-            print(
-                "MJPEG processing failed:",
-                repr(error)
-            )
-
+            print("MJPEG processing failed:", repr(error))
             # Mark the invocation as failed so AWS can retry it.
             raise
 

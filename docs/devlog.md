@@ -710,3 +710,17 @@ Reorganized camera initialization and corrected comments
 - Clarified the purpose of the Lepton soft reset, stabilization period, background frame, and reusable scaling buffer.
 - Removed the unnecessary thermal detection state variable and returned the trigger result directly.
 
+
+## 2026-08-03
+Converted the runtime pipeline to non-blocking asyncio tasks
+
+- Replaced the sequential main loop with concurrent asyncio tasks for RGB prebuffer capture, thermal motion detection, and AWS uploads.
+- Converted the S3 upload pipeline to asynchronous TCP/TLS streams using asyncio.open_connection(), writer.write(), and await writer.drain().
+- Kept MJPEG recording intentionally blocking so the recording pipeline has exclusive control of the cameras.
+- Added a startup delay before the upload task so both camera interfaces and the circular prebuffer can stabilize.
+- Verified that large MJPEG files can be uploaded while both camera tasks continue running.
+- Fixed upload stability by removing gc.collect() from the circular-buffer wrap, as garbage collection during active TLS transfers caused embedded-system crashes.
+- Confirmed stable memory usage during repeated circular-buffer cycles and consecutive asynchronous uploads.
+- Updated AWS processing to route S3 events through SQS with a batch size of one, ensuring each video receives its own Lambda invocation and processing timeout.
+- Verified successful S3 uploads, HTTP 200 responses, local file deletion after confirmation, and continued camera operation during transfer.
+

@@ -188,6 +188,20 @@ class FileManager:
         print("Patched AVI index")
         print("Indexed frames:", len(index_entries))
 
+    def if_files(self):
+        directory = os.listdir(self._motion_capture_dir)
+        if directory:
+            mjpeg_files = []
+            for file in directory:
+                if file.lower().endswith(".mjpeg"):
+                    filename = self._motion_capture_dir + "/" + file
+                    mjpeg_files.append(filename)
+            print("Directory is not empty.")
+            return mjpeg_files
+        else:
+            print("Directory is empty.")
+            return None
+
     def delete_file(self, filename):
         try:
             os.remove(filename)

@@ -2,23 +2,22 @@ from src.NetworkManager import NetworkManager
 from src.StorageConfig import StorageConfig
 from src.FileManager import FileManager
 from src.Camera import Camera
+import asyncio
 
-storage_config = StorageConfig()
-file_manager = FileManager(storage_config)
-file_manager.initialize()
+async def main():
+    storage_config = StorageConfig()
+    file_manager = FileManager(storage_config)
+    file_manager.initialize()
 
-network_manager = NetworkManager(file_manager)
-network_manager.initialize()
+    network_manager = NetworkManager(file_manager)
+    network_manager.initialize()
 
-camera = Camera(storage_config, file_manager, network_manager)
+    camera = Camera(storage_config, file_manager, network_manager)
 
-while True:
-    camera.update_frame_buffer()
+    await asyncio.gather(
+        camera.update_frame_buffer(),
+        camera.monitor_motion(),
+        network_manager.upload_task()
+    )
 
-    if camera.should_check_motion():
-        if camera.detect_motion():
-            print("camera.record_video()")
-            camera.record_video()
-
-    if network_manager.should_upload():
-        network_manager.scheduled_upload()
+asyncio.run(main())

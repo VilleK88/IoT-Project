@@ -7,6 +7,7 @@ import image
 import csi
 import machine
 import time
+import asyncio
 
 class Camera:
     # Initializes the camera system and all runtime resources.
@@ -85,31 +86,12 @@ class Camera:
         self._tools.print_memory_status("After camera initialization")
 
     # Returns True when it is time to perform the next motion check.
-    def should_check_motion(self):
-        now = time.ticks_ms()
-        if time.ticks_diff(now, self._last_motion_check_time) >= self._mot_conf.chk_mot_ms():
-            self._last_motion_check_time = now
-            return True
-        return False
-
-    # Captures and saves a single RGB image.
-    # Currently not used by the recording pipeline, but kept for
-    # future features such as event snapshots or debugging.
-    def take_picture(self):
-        # Capture a full-resolution RGB image.
-        img = self.csi0.snapshot()
-        # Build a unique filename using the configured folder, prefix,
-        # suffix and the next available image number.
-        filename = self._file_manager.build_filename(
-            self._storage_config.img_dir(),
-            self._storage_config.img_prefix(),
-            self._storage_config.img_suffix(),
-            self._file_manager.get_img_count()
-        )
-        # Reserve the next image number for future captures.
-        self._file_manager.increase_img_count()
-        # Save the image to the SD card.
-        img.save(filename)
+    async def monitor_motion(self):
+        while True:
+            if self.detect_motion():
+                print("camera.record_video()")
+                self.record_video()
+            await asyncio.sleep_ms(self._mot_conf.chk_mot_ms())
 
     # Records an MJPEG video beginning with the buffered frames
     # followed by live RGB frames.
@@ -156,10 +138,6 @@ class Camera:
             print("Saved frames:", saved_frames)
             print("Duration ms:", duration_ms)
             self._tools.print_memory_status("record_video_with_prebuffer done")
-            # Upload the recording immediately if configured.
-            if self._upload_config.current_setting() == "Instantly":
-                self._network_manager.upload_mjpeg(filename)
-                self._tools.print_memory_status("upload_mjpeg done")
             self.stop_recording_state()  # Restore the default camera state after recording.
 
     # Creates a new MJPEG file for motion recording.
@@ -227,20 +205,18 @@ class Camera:
         return self._scaled_frame
 
     # Periodically captures PAG7936 RGB frames into the circular RAM buffer.
-    def update_frame_buffer(self):
-        now = time.ticks_ms()
-        # Capture a new frame only when the configured buffer interval has elapsed.
-        # This keeps the buffer at a fixed frame rate regardless of the main loop speed.
-        if time.ticks_diff(now, self._last_frame_time) >= self._buf_config.frame_interval_ms():
-            # Capture the latest frame from the PAG7936 RGB camera.
+    async def update_frame_buffer(self):
+        while True:
             self._current_frame = self.csi0.snapshot()
             # Store a copy of the current frame in the circular buffer.
             # A copy is required because snapshot() reuses the same image buffer.
-            self.save_frame(self._current_frame.copy())
-            self._last_frame_time = now
+            self._save_frame(self._current_frame.copy())
+            # Yield control until the next prebuffer frame is due.
+            await asyncio.sleep_ms(self._buf_config.frame_interval_ms())
+
 
     # Stores a frame in the circular buffer and advances the write index.
-    def save_frame(self, frame):
+    def _save_frame(self, frame):
         # Store the newest frame at the current write position.
         self._buffer[self._buf_index] = frame
         # Advance the write index and wrap back to the beginning when the
@@ -252,9 +228,10 @@ class Camera:
         if self._buf_index == 0:
             # Run garbage collection after one complete buffer cycle to help
             # keep memory usage stable during long-running operation.
-            self._tools.cleanup_memory()
+            #self._tools.cleanup_memory()
             self._ring_buf_fil_count += 1
-            self._tools.print_memory_status(f"After ring buffer filled {self._ring_buf_fil_count}")
+            #self._tools.print_memory_status(f"After ring buffer filled {self._ring_buf_fil_count}")
+            print(f"After ring buffer filled {self._ring_buf_fil_count}")
 
     # Returns the buffered frames in chronological order.
     def get_ordered_buf_frames(self):

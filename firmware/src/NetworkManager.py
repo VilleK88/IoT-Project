@@ -6,9 +6,7 @@ import time
 import ntptime
 import requests
 import os
-import socket
-import ssl
-import gc
+import asyncio
 
 class NetworkManager:
     # Initializes the network manager.
@@ -24,13 +22,10 @@ class NetworkManager:
         self._wlan = network.WLAN(network.STA_IF)
         self._wlan.active(True)
 
-        self._last_upload_check_time_ms = time.ticks_ms()
-
 
     def initialize(self):
         self.connect()
         self._sync_time()
-        #self.upload_mjpeg_files()
 
     # Connects the device to the configured WiFi network.
     def connect(self):
@@ -48,46 +43,30 @@ class NetworkManager:
         ntptime.settime()
         print("Date and time updated:", time.localtime())
 
-
-    def scheduled_upload(self):
-        option = self._upload_config.current_setting()
-        year, month, day, hour, minute, second, weekday, yearday = time.localtime()
-        if option == "Hourly":
-            if minute == 0 and second == 0:
-                self._upload_mjpeg_files()
-        elif option == "Twice per day":
-            for item in self._upload_config.times():
-                if item[0] == hour and item[1] == minute:
-                    self._upload_mjpeg_files()
-        elif option == "Once per day":
-            if self._upload_config.times()[0][0] == hour and self._upload_config.times()[0][1] == minute:
-                self._upload_mjpeg_files()
-        else:
-            print("Unknown command!")
-
-    def should_upload(self):
-        now = time.ticks_ms()
-        if time.ticks_diff(now, self._last_upload_check_time_ms) >= self._upload_config.upload_time_ms():
-            self._last_upload_check_time_ms = now
-            return True
-        return False
+    async def upload_task(self):
+        # Allow both camera interfaces and the first prebuffer cycle to stabilize.
+        await asyncio.sleep_ms(10_000)
+        while True:
+            await self._upload_mjpeg_files()
+            await asyncio.sleep_ms(self._upload_config.upload_time_ms())
 
 
-    def _upload_mjpeg_files(self):
+    async def _upload_mjpeg_files(self):
         files = self._file_manager.if_files()
         if files:
             for file in files:
-                filename = self._file_manager.motion_capture_dir() + "/" + file
                 self._tools.print_memory_status("Memory before upload")
-                if self.upload_mjpeg(filename):
-                    #self._file_manager.delete_file(filename)
-                    print(f"File deleted {filename}")
+                upload_succeeded = await self.upload_mjpeg(file)
+                if upload_succeeded:
+                    self._file_manager.delete_file(file)
+                    print(f"File deleted {file}")
+                # Give the network stack time to release TLS resources.
+                await asyncio.sleep_ms(2000)
 
     # Uploads an MJPEG file to AWS S3 using a presigned URL.
-    def upload_mjpeg(self, filename):
+    async def upload_mjpeg(self, filename):
         self._tools.cleanup_memory()
         print("Waiting before upload")
-        time.sleep_ms(1000)
         # Request a presigned S3 upload URL and separate it into
         # the hostname and request path required for the HTTP request.
         upload_url = self._get_upload_url()
@@ -96,28 +75,14 @@ class NetworkManager:
         file_size = os.stat(filename)[6]
         print("Uploading:", filename)
         print("File size:", file_size)
-        sock = None
-        tls_sock = None
+
+        reader = None
+        writer = None
 
         try:
-            # Resolve the S3 hostname and establish a TCP connection
-            # to the HTTPS port.
-            print("Resolving S3 address")
-            address = socket.getaddrinfo(host, 443)[0][-1]
-            print("Creating socket")
-            sock = socket.socket()
-            print("Connecting socket")
-            sock.connect(address)
-
-            # Encrypt the TCP connection with TLS.
-            # server_hostname enables SNI so that S3 provides the
-            # certificate matching the requested hostname
-            print("Starting TLS setup")
-            tls_sock = ssl.wrap_socket(sock, server_hostname=host)
-            print("TLS setup completed")
-
-            self._tools.print_memory_status("Memory after TLS setup")
-
+            print("Before async TLS connection")
+            reader, writer = await asyncio.open_connection(host, 443, ssl=True)
+            print("Async TLS connection opened")
             # Build the HTTP PUT request header.
             # The presigned URL already contains the authentication
             # parameters required by S3.
@@ -130,25 +95,25 @@ class NetworkManager:
             ).format(path, host, file_size)
             # Send the complete request header before transmitting
             # the MJPEG file contents
-            self._write_all(tls_sock, request_header.encode())
+            writer.write(request_header.encode())
+            await writer.drain()
             upload_start_time = time.ticks_ms()
 
-
-            self._tools.print_memory_status("Memory before file streaming")
             bytes_sent = 0
             next_progress_print = 1024 * 1024
             # Stream the file directly from storage to S3 in blocks
             # instead of loading the complete MJPEG file into RAM.
+            print("Starting file transfer")
             with open(filename, "rb") as file:
                 while True:
-                    chunk = file.read(16384)  # Tested options: 4096, 8192, 16384, 32768
+                    chunk = file.read(4096)  # Tested options: 4096, 8192, 16384, 32768
                     # An empty read indicates that the end of the file
                     # has been reached.
                     if not chunk:
                         break
                     # Ensure the complete block is written before reading
-                    # and sending the next one.
-                    self._write_all(tls_sock, chunk)
+                    writer.write(chunk)
+                    await writer.drain()
                     bytes_sent += len(chunk)
 
                     if bytes_sent >= next_progress_print:
@@ -157,7 +122,7 @@ class NetworkManager:
 
             # Read the first line of the HTTP response, for example:
             # HTTP/1.1 200 OK
-            status_line = tls_sock.readline()
+            status_line = await reader.readline()
             # A missing response usually means that the connection was
             # closed before S3 returned an HTTP status.
             if not status_line:
@@ -166,7 +131,8 @@ class NetworkManager:
             # A successful S3 PUT upload returns HTTP status 200.
             # Read and print the remaining response only when the upload fails.
             if b" 200 " not in status_line:
-                response_body = tls_sock.read()
+                #response_body = tls_sock.read()
+                response_body = await reader.read()
                 print("S3 error response:", response_body)
                 raise OSError("MJPEG upload failed")
 
@@ -182,12 +148,12 @@ class NetworkManager:
             return False
 
         finally:
-            # Always close the active network socket, including when
-            # connecting, sending, or receiving raises an exception.
-            if tls_sock is not None:
-                tls_sock.close()
-            elif sock is not None:
-                sock.close()
+            if writer is not None:
+                try:
+                    writer.close()
+                    await writer.wait_closed()
+                except Exception as error:
+                    print("Writer close error:", error)
 
     # Requests a temporary S3 upload URL from AWS.
     def _get_upload_url(self):
