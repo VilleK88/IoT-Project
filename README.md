@@ -118,7 +118,6 @@ The embedded software is written entirely in **MicroPython** for the **OpenMV N6
 | Amazon Rekognition integration | ✅ |
 | DynamoDB metadata storage | ✅ |
 | Remote configuration | 🚧 |
-| Detection improvements | 🚧 |
 
 ---
 
