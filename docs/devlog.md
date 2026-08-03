@@ -687,3 +687,15 @@ Corrected MJPEG recording resolution
 - Added a reusable 1280×800 RGB565 frame for scaling buffered frames without repeated large memory allocations.
 - Scaled all buffered and catch-up frames to 1280×800 before writing them to the MJPEG file.
 - Verified that the generated MJPEG videos contain 1280×800 frames and preserve the correct playback duration.
+
+## 2026-08-03
+Codebase cleanup and encapsulation
+
+- Removed obsolete variables, configuration values, helper functions, and unused file-management features.
+- Removed the old RGB motion-detection and thermal blob-detection code left behind after switching to thermal frame differencing.
+- Removed unused still-image, temporary-directory, and standalone prebuffer-saving functionality.
+- Simplified the remaining configuration classes to contain only values used by the current runtime pipeline.
+- Marked class-internal methods as private by adding leading underscores.
+- Updated internal method calls to match the new private method names.
+- Reduced the codebase to the functionality currently required for buffering, thermal motion detection, MJPEG recording, and AWS uploads.
+

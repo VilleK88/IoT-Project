@@ -8,7 +8,6 @@ import csi
 import machine
 import time
 
-
 class Camera:
     # Initializes the camera system and all runtime resources.
     def __init__(self, storage_config, file_manager, network_manager):
@@ -31,13 +30,6 @@ class Camera:
         self._last_motion_check_time = time.ticks_ms()
 
         # RGB movement detection settings
-        self._previous_motion_frame = None  # Previous RGB frame used for movement comparison.
-        self._motion_threshold = [(20, 255)]  # Minimum brightness change considered movement.
-        self._motion_min_blob_pixels = 30  # 60 tested Minimum changed pixels required for a movement blob.
-        self._motion_min_blob_area = 50  # 100 Minimum movement blob bounding box area.
-        self._motion_max_blob_pixels = int(
-            self._mot_conf.motion_width() * self._mot_conf.motion_height() * 0.50
-        )  # Reject blobs covering more than 50% of the motion frame.
         self._max_recording_time_ms = 2 * 60 * 1000  # Maximum recording duration 2 minutes.
 
         # Buffer settings
@@ -54,17 +46,12 @@ class Camera:
         self.csi0.pixformat(csi.RGB565)
         self.csi0.framesize(csi.VGA) # 640x480
         self._current_frame = self.csi0.snapshot(time=2000)  # Let new settings take effect.
-        self.csi0.auto_whitebal(True)
+        self.csi0.auto_whitebal(True)  # Enable automatic white balance for improved image quality.
 
         # Thermal detection settings
         # Minimum grayscale value considered warm enough to belong to a thermal target.
-        self._threshold_list = [(100, 255)]  # 20 + (40 / 255 × 20) ≈ 23,1 °C
         self._min_temp_in_celsius = 20.0  # Minimum temperature represented by grayscale value 0.
         self._max_temp_in_celsius = 40.0  # Maximum temperature represented by grayscale value 255.
-        self._min_temp_diff = 2
-        self._min_blob_pixels = 20  # Minimum number of hot pixels required for a blob to be considered a valid target.
-        self._min_blob_area = 20  # Minimum blob bounding box area required for a valid target.
-        self._max_blob_pixels = int(160 * 120 * 0.40)  # Reject blobs covering more than 40% of the thermal frame.
 
         # Initialize the OpenMV N6 Lepton CSI camera interface
         self.csi1 = csi.CSI(cid=csi.LEPTON)
@@ -91,53 +78,7 @@ class Camera:
         # Allocate it before the circular buffer fragments the heap.
         self._scaled_frame = image.Image(1280, 800, csi.RGB565)
 
-    # Detects meaningful movement by comparing consecutive RGB frames
-    # captured during the same recording session.
-    def detect_motion(self):
-        # Convert the full-resolution RGB frame into a smaller grayscale image
-        # to reduce memory usage and speed up movement detection.
-        current_frame = self.create_motion_frame(self._current_frame)
 
-        # The first frame cannot be compared against anything yet, so store it
-        # as the reference frame. No movement has been detected yet.
-        if self._previous_motion_frame is None:
-            self._previous_motion_frame = current_frame
-            return False
-
-        # Create a difference image where unchanged pixels become dark and
-        # pixels whose brightness changed become brighter.
-        diff_img = current_frame.copy()
-        diff_img.difference(self._previous_motion_frame)
-
-        # Store the current frame as the reference for the next movement check.
-        # This ensures that only consecutive RGB frames are compared.
-        self._previous_motion_frame = current_frame
-
-        # Convert the grayscale difference image into a binary movement mask.
-        # Only pixels whose brightness changed by the configured amount remain white.
-        diff_img.binary(self._motion_threshold)
-
-        # Search the binary movement mask for connected regions of changed pixels.
-        for blob in diff_img.find_blobs(
-                self._threshold_list,
-                pixels_threshold=self._motion_min_blob_pixels,
-                area_threshold=self._motion_min_blob_area,
-                merge=False
-        ):
-            current_frame.draw_detection(blob, color1=127)
-            # Reject changes that cover an unrealistically large part of the frame,
-            # because they are more likely caused by camera shake or lighting changes.
-            if blob.pixels < self._motion_max_blob_pixels:
-                print(
-                    "Moving object detected:",
-                    "pixels:", blob.pixels,
-                    "area:", blob.area
-                )
-                print("Movement detected")
-                return True
-        # No sufficiently large and plausible movement region was found.
-        print("No movement detected")
-        return False
 
     # Returns True when it is time to perform the next motion check.
     def should_check_motion(self):
@@ -151,8 +92,6 @@ class Camera:
     # Currently not used by the recording pipeline, but kept for
     # future features such as event snapshots or debugging.
     def take_picture(self):
-        # Enable automatic white balance to improve image quality.
-        self.csi0.auto_whitebal(True)
         # Capture a full-resolution RGB image.
         img = self.csi0.snapshot()
         # Build a unique filename using the configured folder, prefix,
@@ -167,8 +106,6 @@ class Camera:
         self._file_manager.increase_img_count()
         # Save the image to the SD card.
         img.save(filename)
-        # Restore the default white balance setting used for motion detection.
-        self.csi0.auto_whitebal(False)
 
     # Records an MJPEG video beginning with the buffered frames
     # followed by live RGB frames.
@@ -200,7 +137,7 @@ class Camera:
                     if time.ticks_diff(now, last_motion_check) >= self._mot_conf.chk_mot_ms():
                         last_motion_check = now
                         # Reset the no-motion timer whenever movement is detected.
-                        if self.thermal_frame_differencing():
+                        if self.detect_motion():
                             last_motion_time = now
                         # Stop recording after the configured period without movement.
                         elif time.ticks_diff(now, last_motion_time) >= self._mot_conf.motion_timeout_ms():
@@ -242,14 +179,11 @@ class Camera:
         self.csi0.framesize(csi.HD)  # 1280x800
         print("CSI resolution:", self.csi0.width(), self.csi0.height())
         self._led.on()  # Turn on the recording status LED.
-        self.csi0.auto_whitebal(True)  # Enable automatic white balance for improved image quality.
 
     # Restores the camera state after recording has finished.
     def stop_recording_state(self):
         # Remove any buffered frames so the next recording starts with
         self.clear_frame_buffer()  # a fresh circular buffer.
-        self._previous_motion_frame = None
-        self.csi0.auto_whitebal(False)  # Restore the default white balance setting used outside recording.
         self.csi0.framesize(csi.VGA)  # 640x480
 
     # Writes the buffered frames to the MJPEG file.
@@ -317,45 +251,6 @@ class Camera:
             self._ring_buf_fil_count += 1
             self._tools.print_memory_status(f"After ring buffer filled {self._ring_buf_fil_count}")
 
-    # Saves the current circular buffer as an MJPEG video.
-    def save_buf_as_mjpeg(self):
-        print("saving buffer")
-        # Build a unique filename for the buffered video.
-        filename = self._file_manager.build_filename(
-            self._storage_config.pre_buf_dir(),
-            self._storage_config.vid_prefix(),
-            self._storage_config.vid_suffix(),
-            self._file_manager.get_pre_buf_count()
-        )
-        self._file_manager.increase_pre_buf_count()
-        # Create a new MJPEG file on the SD card
-        video = mjpeg.Mjpeg(filename)
-        saved_frames = 0
-        try:
-            # Write all buffered frames to the MJPEG file.
-            saved_frames = self.write_buf_to_video(video)
-        finally:
-            # Always close the MJPEG file, even if writing fails.
-            video.close()
-            # Restore the original recording duration by patching the
-            # MJPEG timing information after all frames have been written.
-            duration_ms = saved_frames * self._buf_config.frame_interval_ms()
-            self._file_manager.patch_mjpeg_timing(filename, saved_frames, duration_ms)
-            print("buffer saved, frames:", saved_frames)
-
-    # Writes the contents of the circular buffer to an MJPEG file.
-    def write_buf_to_video(self, video):
-        saved_frames = 0
-        # Start from write_index because it points to the oldest frame
-        for i in range(self._buf_config.buf_size()):
-            index = (self._buf_index + i) % self._buf_config.buf_size()
-            frame = self._buffer[index]
-            # Skip empty slots if the buffer is not full yet
-            if frame is not None:
-                video.write(frame)
-                saved_frames += 1
-        return saved_frames
-
     # Returns the buffered frames in chronological order.
     def get_ordered_buf_frames(self):
         frames = []
@@ -370,20 +265,8 @@ class Camera:
                 frames.append(frame)
         return frames
 
-    # Creates a smaller grayscale frame for motion detection.
-    def create_motion_frame(self, frame):
-        img = frame.copy(
-            x_scale=self._mot_conf.motion_width() / frame.width(),
-            y_scale=self._mot_conf.motion_height() / frame.height()
-        )
-        img.to_grayscale()
-        return img
-
-    # Converts an 8-bit grayscale value to an estimated temperature.
-    def map_g_to_temp(self, g):
-        return ((g * (self._max_temp_in_celsius - self._min_temp_in_celsius)) / 255.0) + self._min_temp_in_celsius
-
-    def thermal_frame_differencing(self):
+    # Thermal frame differencing.
+    def detect_motion(self):
         img = self.csi1.snapshot()
         self._frame_count += 1
         if self._frame_count > self._bg_update_frames:

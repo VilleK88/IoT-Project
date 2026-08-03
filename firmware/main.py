@@ -16,7 +16,7 @@ while True:
     camera.update_frame_buffer()
 
     if camera.should_check_motion():
-        if camera.thermal_frame_differencing():
+        if camera.detect_motion():
             print("camera.record_video()")
             camera.record_video()
 

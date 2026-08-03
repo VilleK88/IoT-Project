@@ -4,7 +4,6 @@ from src.Tools import Tools
 import network
 import time
 import ntptime
-
 import requests
 import os
 import socket
@@ -31,7 +30,7 @@ class NetworkManager:
 
     def initialize(self):
         self.connect()
-        self.sync_time()
+        self._sync_time()
         #self.upload_mjpeg_files()
 
     # Connects the device to the configured WiFi network.
@@ -46,7 +45,7 @@ class NetworkManager:
         #print("WiFi connected:", self._wlan.ifconfig())
         print("WiFi connected")
 
-    def sync_time(self):
+    def _sync_time(self):
         ntptime.settime()
         print("Date and time updated:", time.localtime())
 
@@ -56,14 +55,14 @@ class NetworkManager:
         year, month, day, hour, minute, second, weekday, yearday = time.localtime()
         if option == "Hourly":
             if minute == 0 and second == 0:
-                self.upload_mjpeg_files()
+                self._upload_mjpeg_files()
         elif option == "Twice per day":
             for item in self._upload_config.times():
                 if item[0] == hour and item[1] == minute:
-                    self.upload_mjpeg_files()
+                    self._upload_mjpeg_files()
         elif option == "Once per day":
             if self._upload_config.times()[0][0] == hour and self._upload_config.times()[0][1] == minute:
-                self.upload_mjpeg_files()
+                self._upload_mjpeg_files()
         else:
             print("Unknown command!")
 
@@ -75,7 +74,7 @@ class NetworkManager:
         return False
 
 
-    def upload_mjpeg_files(self):
+    def _upload_mjpeg_files(self):
         files = self._file_manager.if_files()
         if files:
             for file in files:
@@ -92,8 +91,8 @@ class NetworkManager:
         time.sleep_ms(1000)
         # Request a presigned S3 upload URL and separate it into
         # the hostname and request path required for the HTTP request.
-        upload_url = self.get_upload_url()
-        host, path = self.parse_https_url(upload_url)
+        upload_url = self._get_upload_url()
+        host, path = self._parse_https_url(upload_url)
         # Read the file size for the HTTP Content-Length header.
         file_size = os.stat(filename)[6]
         print("Uploading:", filename)
@@ -132,7 +131,7 @@ class NetworkManager:
             ).format(path, host, file_size)
             # Send the complete request header before transmitting
             # the MJPEG file contents
-            self.write_all(tls_sock, request_header.encode())
+            self._write_all(tls_sock, request_header.encode())
             upload_start_time = time.ticks_ms()
 
 
@@ -150,7 +149,7 @@ class NetworkManager:
                         break
                     # Ensure the complete block is written before reading
                     # and sending the next one.
-                    self.write_all(tls_sock, chunk)
+                    self._write_all(tls_sock, chunk)
                     bytes_sent += len(chunk)
 
                     if bytes_sent >= next_progress_print:
@@ -192,7 +191,7 @@ class NetworkManager:
                 sock.close()
 
     # Requests a temporary S3 upload URL from AWS.
-    def get_upload_url(self):
+    def _get_upload_url(self):
         response = requests.post(
             self._network_config.url_endpoint(),
             json={}
@@ -205,7 +204,7 @@ class NetworkManager:
         return data["upload_url"]
 
     # Parses a presigned HTTPS URL without modifying its signed path or query.
-    def parse_https_url(self, url):
+    def _parse_https_url(self, url):
         prefix = "https://"
 
         if not url.startswith(prefix):
@@ -226,7 +225,7 @@ class NetworkManager:
     # Writes the complete byte buffer to a stream.
     # A socket write may send fewer bytes than requested, so the remaining
     # bytes must be written until the whole buffer has been trasferred.
-    def write_all(self, stream, data):
+    def _write_all(self, stream, data):
         offset = 0
         while offset < len(data):
             written = stream.write(data[offset:])
