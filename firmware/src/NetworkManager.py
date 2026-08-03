@@ -8,7 +8,6 @@ import requests
 import os
 import socket
 import ssl
-
 import gc
 
 class NetworkManager:

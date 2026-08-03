@@ -699,3 +699,14 @@ Codebase cleanup and encapsulation
 - Updated internal method calls to match the new private method names.
 - Reduced the codebase to the functionality currently required for buffering, thermal motion detection, MJPEG recording, and AWS uploads.
 
+
+## 2026-08-03
+Reorganized camera initialization and corrected comments
+
+- Reorganized the Camera class initialization into clearer sections for dependencies, configuration, recording state, buffering, thermal detection, and camera setup.
+- Kept both CSI camera objects initialized directly inside __init__ to preserve the working MicroPython initialization behavior.
+- Corrected PAG7936 resolution comments from 640×480 to the actual 640×400 output.
+- Updated comments to correctly distinguish RGB prebuffer frames from thermal detection frames.
+- Clarified the purpose of the Lepton soft reset, stabilization period, background frame, and reusable scaling buffer.
+- Removed the unnecessary thermal detection state variable and returned the trigger result directly.
+

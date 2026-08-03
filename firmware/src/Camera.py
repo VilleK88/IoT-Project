@@ -12,73 +12,77 @@ class Camera:
     # Initializes the camera system and all runtime resources.
     def __init__(self, storage_config, file_manager, network_manager):
         self._tools = Tools()
-        self._tools.print_memory_status("Before CSI init")
-
-        self._network_manager = network_manager
+        self._tools.print_memory_status("Before camera initialization")
 
         # External dependencies
         self._storage_config = storage_config
         self._file_manager = file_manager
+        self._network_manager = network_manager
 
+        # Feature configuration
+        self._mot_conf = MotionConfig()
+        self._buf_config = BufferConfig()
         self._upload_config = UploadConfig()
 
-        # Hardware indicators
-        self._led = machine.LED("LED_RED") # Status LED is used to indicate active recording
-
-        # Motion detection settings
-        self._mot_conf = MotionConfig()
-        self._last_motion_check_time = time.ticks_ms()
-
-        # RGB movement detection settings
+        # Recording state
+        self._led = machine.LED("LED_RED")
         self._max_recording_time_ms = 2 * 60 * 1000  # Maximum recording duration 2 minutes.
 
-        # Buffer settings
-        self._buf_config = BufferConfig()
+
+        # Motion-check timing
+        self._last_motion_check_time = time.ticks_ms()
+
+        # Circular RGB prebuffer state
         self._buffer = [None] * self._buf_config.buf_size()
         self._buf_index = 0
         self._last_frame_time = 0
         self._frame_interval_ms = self._buf_config.frame_interval_ms()
         self._ring_buf_fil_count = 0
 
-        # Initialize the OpenMV N6 PAG7936 CSI camera
-        self.csi0 = csi.CSI()  # Create a new CSI camera object.
-        self.csi0.reset()  # Initialize and reset the connected camera sensor.
-        self.csi0.pixformat(csi.RGB565)
-        self.csi0.framesize(csi.VGA) # 640x480
-        self._current_frame = self.csi0.snapshot(time=2000)  # Let new settings take effect.
-        self.csi0.auto_whitebal(True)  # Enable automatic white balance for improved image quality.
-
-        # Thermal detection settings
-        # Minimum grayscale value considered warm enough to belong to a thermal target.
+        # Thermal frame-differencing settings
         self._min_temp_in_celsius = 20.0  # Minimum temperature represented by grayscale value 0.
         self._max_temp_in_celsius = 40.0  # Maximum temperature represented by grayscale value 255.
-
-        # Initialize the OpenMV N6 Lepton CSI camera interface
-        self.csi1 = csi.CSI(cid=csi.LEPTON)
-        self.csi1.reset(hard=False)  # Reset and initialize the sensor
-        self.csi1.pixformat(csi.GRAYSCALE)  # Set pixel format to RGB565 (or GRAYSCALE)
-        self.csi1.framesize(csi.QQVGA)  # Set frame size to QQVGA (160x120)
-        # Enable measurement mode
-        self.csi1.ioctl(csi.IOCTL_LEPTON_SET_MODE, True, True)
-        self.csi1.ioctl(csi.IOCTL_LEPTON_SET_RANGE, self._min_temp_in_celsius, self._max_temp_in_celsius)
-
-        self.csi1.snapshot(time=5000) # Let new settings take effect.
-        self._extra_fb = image.Image(self.csi1.width(), self.csi1.height(), self.csi1.pixformat())
-        print("About to save background image...")
-        self._extra_fb.draw_image(self.csi1.snapshot())
-        print("Saved background image - Now frame differencing!")
-        self._triggered = False
         self._frame_count = 0
         self._trigger_threshold = 5
         self._bg_update_frames = 5
         self._bg_update_blend = 128
-        self._tools.print_memory_status("After Lepton CSI config")
 
-        # Reusable 1280x800 RGB565 frame used for scaling pre-buffer frames.
-        # Allocate it before the circular buffer fragments the heap.
+        # Initialize the PAG7936 RGB camera first.
+        # It continuously supplies 640x400 frames to the circular prebuffer
+        # and switches to 1280x800 when event recording begins.
+        self.csi0 = csi.CSI()  # Create a new CSI camera object.
+        self.csi0.reset()  # Initialize and reset the connected camera sensor.
+        self.csi0.pixformat(csi.RGB565)
+        self.csi0.framesize(csi.VGA) # PAG7936 output: 640x400
+        self._current_frame = self.csi0.snapshot(time=2000)  # Let new settings take effect.
+        self.csi0.auto_whitebal(True)  # Enable automatic white balance for improved image quality.
+
+        # Initialize the FLIR Lepton thermal camera second.
+        # Use a soft reset so the already initialized PAG7936 remains active.
+        self.csi1 = csi.CSI(cid=csi.LEPTON)
+        self.csi1.reset(hard=False)  # Soft reset and initialize the sensor
+        self.csi1.pixformat(csi.GRAYSCALE)  # Set pixel format to GRAYSCALE
+        self.csi1.framesize(csi.QQVGA)  # Native Lepton resolution: 160x120
+
+        # Enable radiometric measurement mode and map the grayscale output
+        # to the configured temperature range.
+        self.csi1.ioctl(csi.IOCTL_LEPTON_SET_MODE, True, True)
+        self.csi1.ioctl(csi.IOCTL_LEPTON_SET_RANGE, self._min_temp_in_celsius, self._max_temp_in_celsius)
+
+        # Allow the Lepton to stabilize before capturing the initial
+        # background image used by thermal frame differencing.
+        self.csi1.snapshot(time=5000)
+        self._extra_fb = image.Image(self.csi1.width(), self.csi1.height(), self.csi1.pixformat())
+        print("About to save background image...")
+        self._extra_fb.draw_image(self.csi1.snapshot())
+        print("Saved background image - Now frame differencing!")
+
+        # Reusable 1280x800 RGB565 frame used to scale 640x400 prebuffer
+        # frames without allocating a new large image for every frame.
+        # Allocate it before the circular buffer starts fragmenting the heap.
         self._scaled_frame = image.Image(1280, 800, csi.RGB565)
 
-
+        self._tools.print_memory_status("After camera initialization")
 
     # Returns True when it is time to perform the next motion check.
     def should_check_motion(self):
@@ -115,7 +119,7 @@ class Camera:
         filename, video = self.create_motion_video()
         saved_frames = 0
         try:
-            # Save the buffered thermal frames before switching to the RGB camera.
+            # Write the buffered RGB frames before switching the PAG7936 to HD mode.
             saved_frames = self.write_prebuffer_with_catchup(video)
             self.start_recording_state()
             last_live_frame_time = time.ticks_ms()
@@ -129,7 +133,7 @@ class Camera:
                 if time.ticks_diff(now, last_live_frame_time) >= self._frame_interval_ms:
                     last_live_frame_time = now
                     img = self.csi0.snapshot()  # Capture the next RGB frame.
-                    print("Captured frame:", img.width(), img.height())
+                    #print("Captured frame:", img.width(), img.height())
                     self._current_frame = img
                     video.write(img)  # Append the frame to the MJPEG video.
                     saved_frames += 1
@@ -184,10 +188,11 @@ class Camera:
     def stop_recording_state(self):
         # Remove any buffered frames so the next recording starts with
         self.clear_frame_buffer()  # a fresh circular buffer.
-        self.csi0.framesize(csi.VGA)  # 640x480
+        self.csi0.framesize(csi.VGA)  # PAG7936 output: 640x400
 
     # Writes the buffered frames to the MJPEG file.
-    # New thermal frames are sampled while writing to avoid a capture gap.
+    # New RGB frames are captured while the prebuffer is written
+    # to reduce the gap before live recording.
     def write_prebuffer_with_catchup(self, video):
         last_live_frame_time = time.ticks_ms()
         saved_frames = 0
@@ -201,8 +206,8 @@ class Camera:
             scaled_frame = self.scale_frame(frame)
             video.write(scaled_frame)
             saved_frames += 1
-            # Periodically capture a new thermal frame while writing to
-            # compensate for the time spent saving the pre-buffer.
+            # Periodically capture a new RGB frame while writing to
+            # compensate for the time spent saving the prebuffer.
             now = time.ticks_ms()
             if time.ticks_diff(now, last_live_frame_time) >= self._frame_interval_ms:
                 self._current_frame = self.csi0.snapshot()
@@ -218,16 +223,16 @@ class Camera:
 
     def scale_frame(self, frame):
         self._scaled_frame.draw_image(frame, x_scale=2.0, y_scale=2.0)
-        print("Scaled:", self._scaled_frame.width(), self._scaled_frame.height())
+        #print("Scaled:", self._scaled_frame.width(), self._scaled_frame.height())
         return self._scaled_frame
 
-    # Periodically captures thermal frames into the circular RAM buffer.
+    # Periodically captures PAG7936 RGB frames into the circular RAM buffer.
     def update_frame_buffer(self):
         now = time.ticks_ms()
         # Capture a new frame only when the configured buffer interval has elapsed.
         # This keeps the buffer at a fixed frame rate regardless of the main loop speed.
         if time.ticks_diff(now, self._last_frame_time) >= self._buf_config.frame_interval_ms():
-            # Capture the latest frame from the Lepton thermal camera.
+            # Capture the latest frame from the PAG7936 RGB camera.
             self._current_frame = self.csi0.snapshot()
             # Store a copy of the current frame in the circular buffer.
             # A copy is required because snapshot() reuses the same image buffer.
@@ -276,8 +281,7 @@ class Camera:
         img.difference(self._extra_fb)
         hist = img.get_histogram()
         diff = hist.get_percentile(0.99).l_value - hist.get_percentile(0.90).l_value
-        self._triggered = diff > self._trigger_threshold
-        return self._triggered
+        return diff > self._trigger_threshold
 
     # Clears the circular frame buffer after recording.
     def clear_frame_buffer(self):
