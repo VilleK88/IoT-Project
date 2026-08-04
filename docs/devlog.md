@@ -724,3 +724,12 @@ Converted the runtime pipeline to non-blocking asyncio tasks
 - Updated AWS processing to route S3 events through SQS with a batch size of one, ensuring each video receives its own Lambda invocation and processing timeout.
 - Verified successful S3 uploads, HTTP 200 responses, local file deletion after confirmation, and continued camera operation during transfer.
 
+
+## 2026-08-04
+Improve AWS Lambda documentation and readability
+
+- Improved function-level comments throughout the AWS Lambda processing pipeline.
+- Added clearer explanations for MJPEG frame extraction, Rekognition analysis, detection summaries, and S3 processing.
+- Added higher-level comments describing the processing stages and data flow.
+- Improved code readability and maintainability without changing the existing functionality.
+

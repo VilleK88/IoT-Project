@@ -22,7 +22,6 @@ class NetworkManager:
         self._wlan = network.WLAN(network.STA_IF)
         self._wlan.active(True)
 
-
     def initialize(self):
         self.connect()
         self._sync_time()
@@ -49,7 +48,6 @@ class NetworkManager:
         while True:
             await self._upload_mjpeg_files()
             await asyncio.sleep_ms(self._upload_config.upload_time_ms())
-
 
     async def _upload_mjpeg_files(self):
         files = self._file_manager.if_files()
