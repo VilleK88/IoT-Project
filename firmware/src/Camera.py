@@ -8,6 +8,7 @@ import csi
 import machine
 import time
 import asyncio
+import imu
 
 class Camera:
     # Initializes the camera system and all runtime resources.
@@ -55,8 +56,14 @@ class Camera:
         self.csi0.reset()  # Initialize and reset the connected camera sensor.
         self.csi0.pixformat(csi.RGB565)
         self.csi0.framesize(csi.VGA) # PAG7936 output: 640x400
-        self._current_frame = self.csi0.snapshot(time=2000)  # Let new settings take effect.
+
+        self.csi0.auto_gain(True)
+        self.csi0.auto_exposure(True)
         self.csi0.auto_whitebal(True)  # Enable automatic white balance for improved image quality.
+
+        self.csi0.auto_rotation(True)
+
+        self._current_frame = self.csi0.snapshot(time=2000)  # Let new settings take effect.
 
         # Initialize the FLIR Lepton thermal camera second.
         # Use a soft reset so the already initialized PAG7936 remains active.
@@ -64,6 +71,8 @@ class Camera:
         self.csi1.reset(hard=False)  # Soft reset and initialize the sensor
         self.csi1.pixformat(csi.GRAYSCALE)  # Set pixel format to GRAYSCALE
         self.csi1.framesize(csi.QQVGA)  # Native Lepton resolution: 160x120
+
+        self.csi1.auto_rotation(True)
 
         # Enable radiometric measurement mode and map the grayscale output
         # to the configured temperature range.
@@ -88,7 +97,7 @@ class Camera:
     # Returns True when it is time to perform the next motion check.
     async def monitor_motion(self):
         while True:
-            if self.detect_motion():
+            if await self.detect_motion_async_lepton():
                 print("camera.record_video()")
                 self.record_video()
             await asyncio.sleep_ms(self._mot_conf.chk_mot_ms())
@@ -102,8 +111,14 @@ class Camera:
         saved_frames = 0
         try:
             # Write the buffered RGB frames before switching the PAG7936 to HD mode.
+            print("Before write_prebuffer_with_catchup()")
             saved_frames = self.write_prebuffer_with_catchup(video)
+            print("After write_prebuffer_with_catchup()")
+
+            print("Before start_recording_state()")
             self.start_recording_state()
+            print("After start_recording_state()")
+
             last_live_frame_time = time.ticks_ms()
             last_motion_check = time.ticks_ms()
             recording_start_time = time.ticks_ms()
@@ -123,7 +138,7 @@ class Camera:
                     if time.ticks_diff(now, last_motion_check) >= self._mot_conf.chk_mot_ms():
                         last_motion_check = now
                         # Reset the no-motion timer whenever movement is detected.
-                        if self.detect_motion():
+                        if self._detect_motion_lepton():
                             last_motion_time = now
                         # Stop recording after the configured period without movement.
                         elif time.ticks_diff(now, last_motion_time) >= self._mot_conf.motion_timeout_ms():
@@ -153,8 +168,13 @@ class Camera:
         # Reserve the next video number for future recordings.
         self._file_manager.increase_video_count()
         print("Recording:", filename)
+
+        print("Before mjpeg.Mjpeg()")
         # Create and return the MJPEG video object.
-        return filename, mjpeg.Mjpeg(filename, width=1280, height=800)
+        #return filename, mjpeg.Mjpeg(filename, width=1280, height=800)
+        video = mjpeg.Mjpeg(filename, width=1280, height=800)
+        print("After mjpeg.Mjpeg()")
+        return filename, video
 
     # Enables the hardware and camera settings required for recording.
     def start_recording_state(self):
@@ -174,8 +194,10 @@ class Camera:
     def write_prebuffer_with_catchup(self, video):
         last_live_frame_time = time.ticks_ms()
         saved_frames = 0
+        print("Getting ordered prebuffer")
         # Retrieve the buffered frames in chronological order.
         prebuf_frames = self.get_ordered_buf_frames()
+        print("Writing prebuffer frames")
         # Stores frames captured while the pre-buffer is being written.
         # These frames are appended afterwards to reduce the recording gap.
         catchup_frames = []
@@ -191,6 +213,7 @@ class Camera:
                 self._current_frame = self.csi0.snapshot()
                 catchup_frames.append(self._current_frame.copy())
                 last_live_frame_time = now
+        print("Writing catchup frames")
         # Append the frames captured during the pre-buffer write so the
         # transition from buffered video to live recording is as seamless as possible.
         for frame in catchup_frames:
@@ -205,9 +228,9 @@ class Camera:
         return self._scaled_frame
 
     # Periodically captures PAG7936 RGB frames into the circular RAM buffer.
-    async def update_frame_buffer(self):
+    async def update_frame_buffer_pag(self):
         while True:
-            self._current_frame = self.csi0.snapshot()
+            self._current_frame = await self._snapshot_async(self.csi0)
             # Store a copy of the current frame in the circular buffer.
             # A copy is required because snapshot() reuses the same image buffer.
             self._save_frame(self._current_frame.copy())
@@ -226,11 +249,7 @@ class Camera:
         # back to the beginning. From this point onward, the oldest frames
         # will be overwritten by newer ones.
         if self._buf_index == 0:
-            # Run garbage collection after one complete buffer cycle to help
-            # keep memory usage stable during long-running operation.
-            #self._tools.cleanup_memory()
             self._ring_buf_fil_count += 1
-            #self._tools.print_memory_status(f"After ring buffer filled {self._ring_buf_fil_count}")
             print(f"After ring buffer filled {self._ring_buf_fil_count}")
 
     # Returns the buffered frames in chronological order.
@@ -248,7 +267,7 @@ class Camera:
         return frames
 
     # Thermal frame differencing.
-    def detect_motion(self):
+    def _detect_motion_lepton(self):
         img = self.csi1.snapshot()
         self._frame_count += 1
         if self._frame_count > self._bg_update_frames:
@@ -259,6 +278,27 @@ class Camera:
         hist = img.get_histogram()
         diff = hist.get_percentile(0.99).l_value - hist.get_percentile(0.90).l_value
         return diff > self._trigger_threshold
+
+    async def detect_motion_async_lepton(self):
+        img = await self._snapshot_async(self.csi1)
+        if img is not None:
+            self._frame_count += 1
+            if self._frame_count > self._bg_update_frames:
+                self._frame_count = 0
+                img.blend(self._extra_fb, alpha=(255 - self._bg_update_blend))
+                self._extra_fb.draw_image(img)
+            img.difference(self._extra_fb)
+            hist = img.get_histogram()
+            diff = hist.get_percentile(0.99).l_value - hist.get_percentile(0.90).l_value
+            return diff > self._trigger_threshold
+        return False
+
+    async def _snapshot_async(self, camera):
+        while True:
+            img = camera.snapshot(blocking=False)
+            if img is not None:
+                return img
+            await asyncio.sleep_ms(0)
 
     # Clears the circular frame buffer after recording.
     def clear_frame_buffer(self):

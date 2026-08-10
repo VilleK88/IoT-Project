@@ -733,3 +733,22 @@ Improve AWS Lambda documentation and readability
 - Added higher-level comments describing the processing stages and data flow.
 - Improved code readability and maintainability without changing the existing functionality.
 
+
+## 2026-08-10
+Rebuilt AWS upload backend and continued embedded stability improvements
+
+- Rebuilt the AWS upload backend from the ground up using S3, Lambda, API Gateway, IAM permissions, and presigned upload URLs.
+- Moved the S3 bucket name and upload prefix to Lambda environment variables instead of hardcoding deployment-specific configuration.
+- Created the `/upload-url` API endpoint for requesting temporary presigned S3 upload URLs.
+- Successfully tested the complete OpenMV → API Gateway → Lambda → S3 upload pipeline with multiple MJPEG files.
+- Removed the unnecessary processing status endpoint because the embedded device only needs to determine whether the S3 upload succeeded.
+- Updated the example network configuration for the new AWS API endpoint.
+- Enabled `auto_gain`, `auto_exposure`, and `auto_rotation` for the RGB camera.
+- Continued stress testing simultaneous frame buffering, motion-triggered recording, SD card access, networking, TLS, and S3 uploads.
+- Changed motion monitoring so the intentionally blocking `record_video()` operation runs directly from the async motion task instead of being wrapped as an asynchronous recording operation.
+- Investigated intermittent hard crashes during concurrent camera and network operation using additional memory, TLS, upload, and recording debug markers.
+- Tested MicroPython automatic garbage collection and removed forced garbage collection from memory-status reporting for stability testing.
+- Confirmed that automatic garbage collection can reclaim substantial heap memory without explicit `gc.collect()` calls.
+- Tested both `requests.post()` and direct asynchronous HTTPS for requesting presigned URLs; hard crashes occurred with both approaches, so `requests` was restored and ruled out as the sole cause.
+- Prepared a dedicated `Watchdog` class for later integration and identified the blocking recording loop as an additional location where the watchdog will need to be fed.
+- Added the `/sdcard/logs` directory in preparation for persistent boot, storage, power, and crash-state logging.

@@ -15,6 +15,7 @@ class FileManager:
     def _prepare_directories(self):
         # Create directories if they don't already exist
         self._create_directory(self._storage_config.vid_dir())
+        self._create_directory(self._storage_config.logs_dir())
 
     # Loads the next available file numbers from the existing files
     # on the SD card.
@@ -188,7 +189,7 @@ class FileManager:
         print("Patched AVI index")
         print("Indexed frames:", len(index_entries))
 
-    def if_files(self):
+    def get_files(self):
         directory = os.listdir(self._motion_capture_dir)
         if directory:
             mjpeg_files = []

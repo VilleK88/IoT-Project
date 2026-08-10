@@ -5,6 +5,8 @@ class StorageConfig:
         self._vid_suffix = ".mjpeg"
         self._init_file_num = -1
 
+        self._logs_dir = "/sdcard/logs"
+
     def vid_dir(self):
         return self._vid_dir
 
@@ -16,3 +18,6 @@ class StorageConfig:
 
     def init_file_num(self):
         return self._init_file_num
+
+    def logs_dir(self):
+        return self._logs_dir

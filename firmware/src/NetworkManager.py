@@ -50,7 +50,7 @@ class NetworkManager:
             await asyncio.sleep_ms(self._upload_config.upload_time_ms())
 
     async def _upload_mjpeg_files(self):
-        files = self._file_manager.if_files()
+        files = self._file_manager.get_files()
         if files:
             for file in files:
                 self._tools.print_memory_status("Memory before upload")
@@ -63,7 +63,6 @@ class NetworkManager:
 
     # Uploads an MJPEG file to AWS S3 using a presigned URL.
     async def upload_mjpeg(self, filename):
-        self._tools.cleanup_memory()
         print("Waiting before upload")
         # Request a presigned S3 upload URL and separate it into
         # the hostname and request path required for the HTTP request.
