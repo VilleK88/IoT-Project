@@ -61,7 +61,8 @@ class Camera:
         self.csi0.auto_exposure(True)
         self.csi0.auto_whitebal(True)  # Enable automatic white balance for improved image quality.
 
-        self.csi0.auto_rotation(True)
+        self.csi0.vflip(True)
+        #self.csi0.auto_rotation(True)
 
         self._current_frame = self.csi0.snapshot(time=2000)  # Let new settings take effect.
 
@@ -106,6 +107,8 @@ class Camera:
     # followed by live RGB frames.
     def record_video(self):
         self._tools.print_memory_status("Before recording with prebuffer")
+        self._tools.cleanup_memory()
+        self._tools.print_memory_status("Memory After cleanup")
         # Create a new MJPEG file and prepare the camera for recording.
         filename, video = self.create_motion_video()
         saved_frames = 0
@@ -150,9 +153,9 @@ class Camera:
             duration_ms = saved_frames * self._frame_interval_ms
             self._file_manager.patch_mjpeg_timing(filename, saved_frames, duration_ms)
             self._file_manager.patch_mjpeg_index(filename)
-            print("Saved frames:", saved_frames)
-            print("Duration ms:", duration_ms)
             self._tools.print_memory_status("record_video_with_prebuffer done")
+            self._tools.cleanup_memory()
+            self._tools.print_memory_status("Memory After cleanup")
             self.stop_recording_state()  # Restore the default camera state after recording.
 
     # Creates a new MJPEG file for motion recording.

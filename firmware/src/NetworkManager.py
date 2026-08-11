@@ -7,6 +7,7 @@ import ntptime
 import requests
 import os
 import asyncio
+import json
 
 class NetworkManager:
     # Initializes the network manager.
@@ -21,6 +22,8 @@ class NetworkManager:
 
         self._wlan = network.WLAN(network.STA_IF)
         self._wlan.active(True)
+
+        self._backoff_s = (1, 2, 4, 8, 16, 32, 60)
 
     def initialize(self):
         self.connect()
@@ -38,6 +41,29 @@ class NetworkManager:
         #print("WiFi connected:", self._wlan.ifconfig())
         print("WiFi connected")
 
+    async def reconnect(self):
+        for delay in self._backoff_s:
+            self._wlan.disconnect()
+            self._wlan.connect(self._ssid, self._key)
+            deadline = time.ticks_add(time.ticks_ms(), 10_000)
+            while not self._wlan.isconnected():
+                if time.ticks_diff(deadline, time.ticks_ms()) <= 0:
+                    break
+                await asyncio.sleep_ms(100)
+            if self._wlan.isconnected():
+                print("WiFi reconnected")
+                return True
+            print("Reconnect failed, retrying in", delay, "seconds")
+            await asyncio.sleep(delay)
+        return False
+
+    async def radio_power_cycle(self):
+        print("Power cycling WiFi interface")
+        self._wlan.active(False)
+        await asyncio.sleep(1)
+        self._wlan.active(True)
+        return await self.reconnect()
+
     def _sync_time(self):
         ntptime.settime()
         print("Date and time updated:", time.localtime())
@@ -46,7 +72,12 @@ class NetworkManager:
         # Allow both camera interfaces and the first prebuffer cycle to stabilize.
         await asyncio.sleep_ms(10_000)
         while True:
-            await self._upload_mjpeg_files()
+            if self._wlan.isconnected():
+                await self._upload_mjpeg_files()
+            else:
+                reconnected = await self.reconnect()
+                if not reconnected:
+                    await self.radio_power_cycle()
             await asyncio.sleep_ms(self._upload_config.upload_time_ms())
 
     async def _upload_mjpeg_files(self):
@@ -58,15 +89,19 @@ class NetworkManager:
                 if upload_succeeded:
                     self._file_manager.delete_file(file)
                     print(f"File deleted {file}")
+                    self._tools.cleanup_memory()
+                    self._tools.print_memory_status("Memory after successful upload cleanup")
                 # Give the network stack time to release TLS resources.
                 await asyncio.sleep_ms(2000)
 
     # Uploads an MJPEG file to AWS S3 using a presigned URL.
     async def upload_mjpeg(self, filename):
+        self._tools.cleanup_memory()
+        self._tools.print_memory_status("Memory after cleanup")
         print("Waiting before upload")
         # Request a presigned S3 upload URL and separate it into
         # the hostname and request path required for the HTTP request.
-        upload_url = self._get_upload_url()
+        upload_url = await self._get_upload_url()
         host, path = self._parse_https_url(upload_url)
         # Read the file size for the HTTP Content-Length header.
         file_size = os.stat(filename)[6]
@@ -152,17 +187,82 @@ class NetworkManager:
                 except Exception as error:
                     print("Writer close error:", error)
 
+    # Sends a JSON POST request over HTTPS and returns the JSON response.
+    async def _post_json(self, url, data):
+        host, path = self._parse_https_url(url)
+
+        # Convert the Python object into a JSON request body.
+        body = json.dumps(data)
+
+        reader = None
+        writer = None
+
+        try:
+            print("Before async POST connection")
+            reader, writer = await asyncio.open_connection(host, 443, ssl=True)
+            print("Async POST connection opened")
+
+            # Build the HTTP POST request header.
+            request = (
+                "POST {} HTTP/1.1\r\n"
+                "Host: {}\r\n"
+                "Content-Type: application/json\r\n"
+                "Content-Length: {}\r\n"
+                "Connection: close\r\n"
+                "\r\n"
+                "{}"
+            ).format(path, host, len(body), body)
+
+            # Send the request headers and JSON body.
+            print("POST 1: writing request")
+            writer.write(request.encode())
+            print("POST 2: draining")
+            await writer.drain()
+            print("POST 3: drained")
+
+            # Read the HTTP status line.
+            print("POST 4: reading status")
+            status_line = await reader.readline()
+            print("POST 5: status:", status_line)
+
+            if not status_line:
+                raise OSError("No response received")
+
+            if b" 200 " not in status_line:
+                raise OSError(
+                    "HTTP POST failed: {}".format(status_line)
+                )
+
+            print("POST 6: reading headers")
+            # Skip HTTP response headers.
+            while True:
+                line = await reader.readline()
+
+                if line == b"\r\n":
+                    break
+            print("POST 7: headers complete")
+
+            # Read and decode the JSON response body.
+            print("POST 8: reading body")
+            response_body = await reader.read()
+            print("POST 9: body received")
+            return json.loads(response_body)
+
+        except Exception as error:
+            print("POST error:", error)
+            raise
+
+        finally:
+            if writer is not None:
+                try:
+                    writer.close()
+                    await writer.wait_closed()
+                except Exception as error:
+                    print("Writer close error:", error)
+
     # Requests a temporary S3 upload URL from AWS.
-    def _get_upload_url(self):
-        response = requests.post(
-            self._network_config.url_endpoint(),
-            json={}
-        )
-
-        if response.status_code != 200:
-            raise OSError("Upload URL request failed: {}".format(response.status_code))
-
-        data = response.json()
+    async def _get_upload_url(self):
+        data = await self._post_json(self._network_config.url_endpoint(), {})
         return data["upload_url"]
 
     # Parses a presigned HTTPS URL without modifying its signed path or query.
@@ -186,7 +286,7 @@ class NetworkManager:
 
     # Writes the complete byte buffer to a stream.
     # A socket write may send fewer bytes than requested, so the remaining
-    # bytes must be written until the whole buffer has been trasferred.
+    # bytes must be written until the whole buffer has been transferred.
     def _write_all(self, stream, data):
         offset = 0
         while offset < len(data):

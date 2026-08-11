@@ -752,3 +752,16 @@ Rebuilt AWS upload backend and continued embedded stability improvements
 - Tested both `requests.post()` and direct asynchronous HTTPS for requesting presigned URLs; hard crashes occurred with both approaches, so `requests` was restored and ruled out as the sole cause.
 - Prepared a dedicated `Watchdog` class for later integration and identified the blocking recording loop as an additional location where the watchdog will need to be fed.
 - Added the `/sdcard/logs` directory in preparation for persistent boot, storage, power, and crash-state logging.
+
+## 2026-08-11
+Stabilized concurrent camera recording and asynchronous S3 uploads
+
+- Converted the S3 upload path to asynchronous networking so uploads can run concurrently with the camera task.
+- Added asynchronous HTTPS handling for requesting presigned S3 upload URLs and transferring MJPEG files.
+- Added error handling and cleanup around network streams and upload operations.
+- Isolated the hard-reset issue to memory pressure during concurrent camera and network workloads.
+- Added explicit garbage collection before and after MJPEG uploads and video recordings.
+- Verified that manual memory cleanup consistently restores available heap during continuous camera and upload operation.
+- Successfully uploaded multiple large MJPEG files while the camera prebuffer continued running.
+- Verified that video recording can run during an active upload without causing a system reset.
+- Confirmed that long blocking recordings can still cause the active TLS connection to return ECONNRESET, while the application continues running and recovers afterward.
