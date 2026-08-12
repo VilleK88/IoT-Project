@@ -765,3 +765,20 @@ Stabilized concurrent camera recording and asynchronous S3 uploads
 - Successfully uploaded multiple large MJPEG files while the camera prebuffer continued running.
 - Verified that video recording can run during an active upload without causing a system reset.
 - Confirmed that long blocking recordings can still cause the active TLS connection to return ECONNRESET, while the application continues running and recovers afterward.
+
+## 2026-08-12
+Added Lepton frame buffering, thermal MJPEG recording, and shared camera logic
+
+- Added a dedicated circular frame buffer for the FLIR Lepton thermal camera alongside the existing PAG7936 RGB buffer.
+- Added asynchronous Lepton frame-buffer updates so RGB and thermal prebuffers run concurrently.
+- Refactored several camera functions to be reusable for both PAG7936 and Lepton instead of maintaining separate duplicated implementations.
+- Generalized `_save_frame()` so both cameras use the same circular-buffer storage logic with separate buffers, indexes, and fill counters.
+- Generalized `get_ordered_buf_frames()` and `clear_frame_buffer()` so the same logic can operate on either camera buffer.
+- Generalized `create_motion_video()` so recording resolution and filename prefix can be passed per camera.
+- Refactored the PAG7936 and Lepton recording resolutions into variables instead of using hard-coded magic numbers.
+- Added simultaneous PAG7936 and Lepton MJPEG recording for motion-triggered events.
+- Added separate recording files and filename prefixes for RGB and thermal videos.
+- Extended prebuffer and catch-up handling so both RGB and thermal frames are written before live recording begins.
+- Added fresh Lepton snapshots during catch-up recording instead of reusing the same thermal frame.
+- Added separate frame counters and MJPEG timing/index patching for RGB and thermal recordings.
+- Updated recording-state cleanup to clear both RGB and thermal circular buffers after an event.

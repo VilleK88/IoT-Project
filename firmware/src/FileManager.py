@@ -23,7 +23,7 @@ class FileManager:
         # Continue numbering from the highest existing file number
         self._vid_count = self._get_next_file_num(
             self._storage_config.vid_dir(),
-            self._storage_config.vid_prefix(),
+            self._storage_config.video_prefix_pag(),
             self._storage_config.vid_suffix()
         )
 
