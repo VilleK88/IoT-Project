@@ -114,7 +114,10 @@ class Camera:
         while True:
             if await self.detect_motion_async_lepton():
                 print("camera.record_video()")
-                self.record_video_and_monitor()
+                if self._file_manager.video_space_available():
+                    self.record_video_and_monitor()
+                else:
+                    print("Video storage quota reached")
             await asyncio.sleep_ms(self._mot_conf.chk_mot_ms())
 
     # Records an MJPEG video beginning with the buffered frames

@@ -1,5 +1,6 @@
 from src.NetworkConfig import NetworkConfig
 from src.UploadConfig import UploadConfig
+from src.TimeManager import TimeManager
 from src.Tools import Tools
 import network
 import time
@@ -15,6 +16,7 @@ class NetworkManager:
         self._tools = Tools()
         self._file_manager = file_manager
         self._upload_config = UploadConfig()
+        self._time_manager = TimeManager()
 
         self._network_config = NetworkConfig()
         self._ssid = self._network_config.ssid()
@@ -63,7 +65,11 @@ class NetworkManager:
         return await self.reconnect()
 
     def _sync_time(self):
+        # NTP initially sets the RTC to UTC.
         ntptime.settime()
+        # Convert the RTC to Finnish local time so filesystem timestamps
+        # use the correct winter/summer time.
+        self._time_manager.set_finland_local_time()
         print("Date and time updated:", time.localtime())
 
     async def upload_task(self):

@@ -792,3 +792,14 @@ Removed remaining magic numbers and centralized configuration
 - Moved network timing, retry, TLS, upload chunk size, and progress reporting values into UploadConfig.
 - Updated the code to use the new configuration values instead of hard-coded values.
 - Updated dual-camera file counter initialization to prevent filename conflicts between PAG7936 and Lepton recordings.
+
+## 2026-08-13
+Added storage quotas, rotating logs, and Finland-local timestamps
+
+- Added logical SD-card quotas to separate video storage from log storage while keeping a safety reserve.
+- Added video storage checks so new recordings are rejected when the reserved video area is full.
+- Added LogManager with sequential log files, configurable file rotation, and automatic deletion of the oldest logs when the log quota is exceeded.
+- Added reusable INFO, WARNING, and ERROR logging methods.
+- Added filesystem capacity and directory usage calculations for storage management.
+- Added TimeManager for Finnish winter/summer time handling.
+- Updated NTP synchronization so the RTC is converted from UTC to Finnish local time, giving log entries and SD-card files correct local timestamps.

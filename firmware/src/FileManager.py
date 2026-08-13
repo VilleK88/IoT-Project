@@ -215,3 +215,33 @@ class FileManager:
             print(filename, "removed")
         except OSError as error:
             print("Failed to remove", filename, ":", error)
+
+    def _get_storage_capacity(self):
+        stats = os.statvfs("/sdcard")  # Get filesystem statistics.
+        block_size = stats[0]  # Filesystem block size in bytes.
+        total_blocks = stats[2]  # Total number of filesystem blocks.
+        return block_size * total_blocks  # Calculate total filesystem capacity in bytes.
+
+    def video_quota_bytes(self):
+        total = self._get_storage_capacity()
+        return total * self._storage_config.video_quota_percent() // 100
+
+    def log_quota_bytes(self):
+        total = self._get_storage_capacity()
+        return total * self._storage_config.log_quota_percent() // 100
+
+    def directory_size(self, dir):
+        total_size = 0
+        for filename in os.listdir(dir):
+            path = dir + "/" + filename
+            try:
+                stats = os.stat(path)  # Get path metadata.
+                total_size += stats[6]  # File size in bytes.
+            except OSError:
+                pass
+        return total_size
+
+    def video_space_available(self, reserve_bytes=0):
+        used = self.directory_size(self._storage_config.vid_dir())
+        quota = self.video_quota_bytes()
+        return used + reserve_bytes <= quota

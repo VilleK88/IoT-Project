@@ -1,6 +1,7 @@
 from src.NetworkManager import NetworkManager
 from src.StorageConfig import StorageConfig
 from src.FileManager import FileManager
+from src.LogManager import LogManager
 from src.Camera import Camera
 from src.Watchdog import Watchdog
 import asyncio
@@ -12,6 +13,8 @@ async def main():
     network_manager = NetworkManager(file_manager)
     network_manager.initialize()
     file_manager.initialize()
+    log_manager = LogManager(file_manager)
+    log_manager.initialize()
 
     camera = Camera(storage_config, file_manager, network_manager)
 
