@@ -1,6 +1,7 @@
 from src.NetworkConfig import NetworkConfig
 from src.UploadConfig import UploadConfig
 from src.TimeManager import TimeManager
+from src.CameraConfig import CameraConfig
 from src.Tools import Tools
 import network
 import time
@@ -12,11 +13,13 @@ import json
 
 class NetworkManager:
     # Initializes the network manager.
-    def __init__(self, file_manager):
+    def __init__(self, file_manager, log_manager):
         self._tools = Tools()
         self._file_manager = file_manager
+        self._log_manager = log_manager
         self._upload_config = UploadConfig()
         self._time_manager = TimeManager()
+        self._camera_config = CameraConfig()
 
         self._network_config = NetworkConfig()
         self._ssid = self._network_config.ssid()
@@ -33,13 +36,19 @@ class NetworkManager:
     def connect(self):
         self._wlan.connect(self._ssid, self._key)
 
-        while not self._wlan.isconnected():
+        attempts = 0
+
+        while (
+            not self._wlan.isconnected()
+            and attempts < self._upload_config.connect_max_attempts()
+        ):
             print('Trying to connect to "{:s}"...'.format(self._ssid))
+            attempts += 1
             time.sleep_ms(self._upload_config.connect_poll_ms())
 
         # A valid IP address should now be assigned by DHCP.
         #print("WiFi connected:", self._wlan.ifconfig())
-        print("WiFi connected")
+        print("Wi-Fi connected")
 
     async def reconnect(self):
         for delay in self._upload_config.backoff_s():
@@ -52,13 +61,18 @@ class NetworkManager:
                 await asyncio.sleep_ms(self._upload_config.reconnect_poll_ms())
             if self._wlan.isconnected():
                 print("WiFi reconnected")
+                self._log_manager.info("Wi-Fi reconnected")
+                # Resynchronize the RTC after network recovery.
+                self._sync_time()
                 return True
             print("Reconnect failed, retrying in", delay, "seconds")
+            self._log_manager.warning("Reconnect failed")
             await asyncio.sleep(delay)
         return False
 
     async def radio_power_cycle(self):
-        print("Power cycling WiFi interface")
+        print("Power cycling Wi-Fi interface")
+        self._log_manager.info("Power cycling Wi-Fi interface")
         self._wlan.active(False)
         await asyncio.sleep(self._upload_config.radio_restart_delay_s())
         self._wlan.active(True)
@@ -93,6 +107,7 @@ class NetworkManager:
                 if upload_succeeded:
                     self._file_manager.delete_file(file)
                     print(f"File deleted {file}")
+                    self._log_manager.info(f"File deleted {file}")
                     self._tools.cleanup_memory()
                     self._tools.print_memory_status("Memory after successful upload cleanup")
                 # Give the network stack time to release TLS resources.
@@ -103,9 +118,15 @@ class NetworkManager:
         self._tools.cleanup_memory()
         self._tools.print_memory_status("Memory after cleanup")
         print("Waiting before upload")
+        metadata = self._file_manager.get_video_metadata(filename)
+        data = {
+            "camera_id": self._camera_config.camera_id(),
+            "event_id": metadata["event_id"],
+            "sensor": metadata["sensor"]
+        }
         # Request a presigned S3 upload URL and separate it into
         # the hostname and request path required for the HTTP request.
-        upload_url = await self._get_upload_url()
+        upload_url = await self._get_upload_url(data)
         host, path = self._parse_https_url(upload_url)
         # Read the file size for the HTTP Content-Length header.
         file_size = os.stat(filename)[6]
@@ -175,6 +196,7 @@ class NetworkManager:
                 raise OSError("MJPEG upload failed")
 
             print("MJPEG upload successful")
+            self._log_manager.info(f"{filename} uploaded successfully")
             # Calculate the total upload duration and average transfer speed.
             upload_duration_ms = time.ticks_diff(time.ticks_ms(), upload_start_time)
             print("Upload duration ms:", upload_duration_ms)
@@ -269,9 +291,9 @@ class NetworkManager:
                     print("Writer close error:", error)
 
     # Requests a temporary S3 upload URL from AWS.
-    async def _get_upload_url(self):
-        data = await self._post_json(self._network_config.url_endpoint(), {})
-        return data["upload_url"]
+    async def _get_upload_url(self, data):
+        response = await self._post_json(self._network_config.url_endpoint(), data)
+        return response["upload_url"]
 
     # Parses a presigned HTTPS URL without modifying its signed path or query.
     def _parse_https_url(self, url):

@@ -1,5 +1,7 @@
 class CameraConfig:
     def __init__(self):
+        self._camera_id = "camera_001"
+
         self._buf_width_pag = 640
         self._buf_height_pag = 400
         self._recording_width_pag = 1280
@@ -39,3 +41,6 @@ class CameraConfig:
 
     def lepton_stabilization_ms(self):
         return self._lepton_stabilization_ms
+
+    def camera_id(self):
+        return self._camera_id

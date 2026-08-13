@@ -17,6 +17,8 @@ class UploadConfig:
 
         self._connect_poll_ms = 1000
 
+        self._connect_max_attempts = 10
+
     def upload_time_ms(self):
         return self._upload_time_ms
 
@@ -49,3 +51,6 @@ class UploadConfig:
 
     def connect_poll_ms(self):
         return self._connect_poll_ms
+
+    def connect_max_attempts(self):
+        return self._connect_max_attempts

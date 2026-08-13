@@ -1,4 +1,5 @@
 from src.StorageConfig import StorageConfig
+from src.TimeManager import TimeManager
 import os
 import time
 
@@ -6,6 +7,7 @@ class LogManager:
     def __init__(self, file_manager):
         self._storage_config = StorageConfig()
         self._file_manager = file_manager
+        self._time_manager = TimeManager()
 
         self._log_count = 0
         self._current_log = None
@@ -32,7 +34,7 @@ class LogManager:
         self._log_count += 1
 
     def write_log(self, lvl, msg):
-        entry = "{} [{}] {}\n".format(time.time(), lvl, msg)
+        entry = "{} [{}] {}\n".format(self._time_manager.timestamp(), lvl, msg)
         self._ensure_log_space(len(entry))
         with open(self._current_log, "a") as file:
             file.write(entry)

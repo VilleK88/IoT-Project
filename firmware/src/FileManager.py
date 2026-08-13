@@ -245,3 +245,18 @@ class FileManager:
         used = self.directory_size(self._storage_config.vid_dir())
         quota = self.video_quota_bytes()
         return used + reserve_bytes <= quota
+
+    def get_video_metadata(self, filename):
+        name = filename.split("/")[-1]
+        pag_prefix = self._storage_config.video_prefix_pag()
+        lepton_prefix = self._storage_config.video_prefix_lepton()
+        suffix = self._storage_config.vid_suffix()
+        if name.startswith(pag_prefix):
+            sensor = "pag"
+            number_part = name[len(pag_prefix):-len(suffix)]
+        elif name.startswith(lepton_prefix):
+            sensor = "lepton"
+            number_part = name[len(lepton_prefix):-len(suffix)]
+        else:
+            return None
+        return {"event_id": int(number_part), "sensor": sensor}

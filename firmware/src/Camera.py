@@ -13,7 +13,14 @@ import imu
 
 class Camera:
     # Initializes the camera system and all runtime resources.
-    def __init__(self, storage_config, file_manager, network_manager):
+    def __init__(self,
+                 storage_config,
+                 file_manager,
+                 network_manager,
+                 log_manager,
+                 watchdog
+                 ):
+
         self._tools = Tools()
         self._tools.print_memory_status("Before camera initialization")
 
@@ -21,6 +28,8 @@ class Camera:
         self._storage_config = storage_config
         self._file_manager = file_manager
         self._network_manager = network_manager
+        self._log_manager = log_manager
+        self._watchdog = watchdog
 
         # Feature configuration
         self._cam_config = CameraConfig()
@@ -77,7 +86,8 @@ class Camera:
         self.csi1.pixformat(csi.GRAYSCALE)  # Set pixel format to GRAYSCALE
         self.csi1.framesize(csi.QQVGA)  # Native Lepton resolution: 160x120
 
-        self.csi1.auto_rotation(True)
+        self.csi1.vflip(True)
+        #self.csi1.auto_rotation(True)
 
         # Enable radiometric measurement mode and map the grayscale output
         # to the configured temperature range.
@@ -115,9 +125,16 @@ class Camera:
             if await self.detect_motion_async_lepton():
                 print("camera.record_video()")
                 if self._file_manager.video_space_available():
-                    self.record_video_and_monitor()
+                    self._log_manager.info("Video recording started")
+                    try:
+                        self.record_video_and_monitor()
+                        self._log_manager.info("Video recording completed")
+                    except Exception as err:
+                        self._log_manager.error("Video recording failed: {}".format(err))
+                        raise
                 else:
                     print("Video storage quota reached")
+                    self._log_manager.warning("Video storage quota reached")
             await asyncio.sleep_ms(self._mot_conf.chk_mot_ms())
 
     # Records an MJPEG video beginning with the buffered frames
@@ -160,9 +177,16 @@ class Camera:
             last_motion_check = time.ticks_ms()
             recording_start_time = time.ticks_ms()
             last_motion_time = time.ticks_ms()
+            last_watchdog_feed = time.ticks_ms()
+
             # Continue recording RGB frames until no motion is detected or the maximum recording time is reached.
             while time.ticks_diff(time.ticks_ms(), recording_start_time) < self._cam_config.max_recording_time_ms():
                 now = time.ticks_ms()
+
+                if time.ticks_diff(now, last_watchdog_feed) >= self._watchdog.feed_interval_ms():
+                    self._watchdog.feed()
+                    last_watchdog_feed = now
+
                 # Maintain the configured recording frame rate.
                 if time.ticks_diff(now, last_live_frame_time) >= self._frame_interval_ms_pag:
                     last_live_frame_time = now
@@ -357,6 +381,8 @@ class Camera:
         if this_index == 0:
             this_count += 1
             print(f"After {name} ring buffer filled {this_count}")
+            if name == "PAG7936":
+                self._tools.cleanup_memory()
         return this_index, this_count
 
     # Returns the buffered frames in chronological order.

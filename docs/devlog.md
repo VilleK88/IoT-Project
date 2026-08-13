@@ -803,3 +803,17 @@ Added storage quotas, rotating logs, and Finland-local timestamps
 - Added filesystem capacity and directory usage calculations for storage management.
 - Added TimeManager for Finnish winter/summer time handling.
 - Updated NTP synchronization so the RTC is converted from UTC to Finnish local time, giving log entries and SD-card files correct local timestamps.
+
+## 2026-08-13
+Storage Quotas, Persistent Logging and Watchdog Integration
+
+- Separated SD card storage into reserved video and log quotas to prevent either data type from consuming the entire storage capacity.
+- Added automatic deletion of the oldest log files when the reserved log storage becomes full.
+- Prevented new video recordings from starting when the reserved video storage quota is reached.
+- Added persistent timestamped logging for system boot events, video recording events, storage conditions and network operations.
+- Added Finnish local-time handling, including daylight-saving time, so filesystem and log timestamps use the correct local time.
+- Added hardware watchdog support with periodic feeding during normal asynchronous operation and blocking video recording.
+- Added watchdog reset-cause logging to identify watchdog-triggered system restarts.
+- Added periodic garbage collection when the PAG7936 circular frame buffer wraps to reduce memory pressure during concurrent buffering and uploads.
+- Added camera ID, event ID and sensor metadata to MJPEG upload requests in preparation for organizing paired PAG7936 and Lepton recordings on AWS.
+- Estimated SD card recording capacity based on real 60-second recordings: approximately 410 complete dual-camera events (~820 MJPEG files) on 29.6 GB of storage. A full 60-second event uses approximately 74 MB for the PAG7936 recording and 1.2 MB for the Lepton recording (~75 MB combined).
