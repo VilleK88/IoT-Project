@@ -782,3 +782,13 @@ Added Lepton frame buffering, thermal MJPEG recording, and shared camera logic
 - Added fresh Lepton snapshots during catch-up recording instead of reusing the same thermal frame.
 - Added separate frame counters and MJPEG timing/index patching for RGB and thermal recordings.
 - Updated recording-state cleanup to clear both RGB and thermal circular buffers after an event.
+
+## 2026-08-12
+Removed remaining magic numbers and centralized configuration
+
+- Added CameraConfig to centralize camera-specific configuration values.
+- Replaced hard-coded camera resolutions, stabilization delays, and recording limits with configuration values.
+- Moved motion detection thresholds, temperature ranges, histogram percentiles, and background update values into MotionConfig.
+- Moved network timing, retry, TLS, upload chunk size, and progress reporting values into UploadConfig.
+- Updated the code to use the new configuration values instead of hard-coded values.
+- Updated dual-camera file counter initialization to prevent filename conflicts between PAG7936 and Lepton recordings.

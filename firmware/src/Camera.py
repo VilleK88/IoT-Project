@@ -1,3 +1,4 @@
+from src.CameraConfig import CameraConfig
 from src.MotionConfig import MotionConfig
 from src.BufferConfig import BufferConfig
 from src.UploadConfig import UploadConfig
@@ -22,14 +23,13 @@ class Camera:
         self._network_manager = network_manager
 
         # Feature configuration
+        self._cam_config = CameraConfig()
         self._mot_conf = MotionConfig()
         self._buf_config = BufferConfig()
         self._upload_config = UploadConfig()
 
         # Recording state
         self._led = machine.LED("LED_RED")
-        self._max_recording_time_ms = 2 * 60 * 1000  # Maximum recording duration 2 minutes.
-
 
         # Motion-check timing
         self._last_motion_check_time = time.ticks_ms()
@@ -49,12 +49,7 @@ class Camera:
         self._ring_buf_fil_count_lepton = 0
 
         # Thermal frame-differencing settings
-        self._min_temp_in_celsius = 20.0  # Minimum temperature represented by grayscale value 0.
-        self._max_temp_in_celsius = 40.0  # Maximum temperature represented by grayscale value 255.
         self._frame_count = 0
-        self._trigger_threshold = 5
-        self._bg_update_frames = 5
-        self._bg_update_blend = 128
 
         # Initialize the PAG7936 RGB camera first.
         # It continuously supplies 640x400 frames to the circular prebuffer
@@ -64,11 +59,6 @@ class Camera:
         self.csi0.pixformat(csi.RGB565)
         self.csi0.framesize(csi.VGA) # PAG7936 output: 640x400
 
-        self._buf_width_pag = 640
-        self._buf_height_pag = 400
-        self._recording_width_pag = 1280
-        self._recording_height_pag = 800
-
         self.csi0.auto_gain(True)
         self.csi0.auto_exposure(True)
         self.csi0.auto_whitebal(True)  # Enable automatic white balance for improved image quality.
@@ -76,7 +66,9 @@ class Camera:
         self.csi0.vflip(True)
         #self.csi0.auto_rotation(True)
 
-        self._current_frame_pag = self.csi0.snapshot(time=2000)  # Let new settings take effect.
+        self._current_frame_pag = (
+            self.csi0.snapshot(time=self._cam_config.pag_stabilization_ms())
+        )  # Let new settings take effect.
 
         # Initialize the FLIR Lepton thermal camera second.
         # Use a soft reset so the already initialized PAG7936 remains active.
@@ -85,19 +77,22 @@ class Camera:
         self.csi1.pixformat(csi.GRAYSCALE)  # Set pixel format to GRAYSCALE
         self.csi1.framesize(csi.QQVGA)  # Native Lepton resolution: 160x120
 
-        self._width_lepton = 160
-        self._height_lepton = 120
-
         self.csi1.auto_rotation(True)
 
         # Enable radiometric measurement mode and map the grayscale output
         # to the configured temperature range.
         self.csi1.ioctl(csi.IOCTL_LEPTON_SET_MODE, True, True)
-        self.csi1.ioctl(csi.IOCTL_LEPTON_SET_RANGE, self._min_temp_in_celsius, self._max_temp_in_celsius)
+        self.csi1.ioctl(
+            csi.IOCTL_LEPTON_SET_RANGE,
+            self._mot_conf.min_temp_in_celsius(),
+            self._mot_conf.max_temp_in_celsius()
+        )
 
         # Allow the Lepton to stabilize before capturing the initial
         # background image used by thermal frame differencing.
-        self._current_frame_lepton = self.csi1.snapshot(time=5000)
+        self._current_frame_lepton = (
+            self.csi1.snapshot(time=self._cam_config.lepton_stabilization_ms())
+        )
         self._extra_fb = image.Image(self.csi1.width(), self.csi1.height(), self.csi1.pixformat())
         print("About to save background image...")
         self._extra_fb.draw_image(self.csi1.snapshot())
@@ -107,7 +102,9 @@ class Camera:
         # frames without allocating a new large image for every frame.
         # Allocate it before the circular buffer starts fragmenting the heap.
         self._scaled_frame = image.Image(
-            self._recording_width_pag, self._recording_height_pag, csi.RGB565
+            self._cam_config.recording_width_pag(),
+            self._cam_config.recording_height_pag(),
+            csi.RGB565
         )
 
         self._tools.print_memory_status("After camera initialization")
@@ -130,13 +127,13 @@ class Camera:
         # Create a new MJPEG file and prepare the camera for recording.
         filename_pag, video_pag = self.create_motion_video(
             self._storage_config.video_prefix_pag(),
-            self._recording_width_pag,
-            self._recording_height_pag,
+            self._cam_config.recording_width_pag(),
+            self._cam_config.recording_height_pag(),
         )
         filename_lepton, video_lepton = self.create_motion_video(
             self._storage_config.video_prefix_lepton(),
-            self._width_lepton,
-            self._height_lepton
+            self._cam_config.width_lepton(),
+            self._cam_config.height_lepton()
         )
         # Reserve the next video number for future recordings.
         self._file_manager.increase_video_count()
@@ -161,7 +158,7 @@ class Camera:
             recording_start_time = time.ticks_ms()
             last_motion_time = time.ticks_ms()
             # Continue recording RGB frames until no motion is detected or the maximum recording time is reached.
-            while time.ticks_diff(time.ticks_ms(), recording_start_time) < self._max_recording_time_ms:
+            while time.ticks_diff(time.ticks_ms(), recording_start_time) < self._cam_config.max_recording_time_ms():
                 now = time.ticks_ms()
                 # Maintain the configured recording frame rate.
                 if time.ticks_diff(now, last_live_frame_time) >= self._frame_interval_ms_pag:
@@ -378,28 +375,32 @@ class Camera:
         #img = self.csi1.snapshot()
         img = self._current_frame_lepton
         self._frame_count += 1
-        if self._frame_count > self._bg_update_frames:
+        if self._frame_count > self._mot_conf.bg_update_frames():
             self._frame_count = 0
-            img.blend(self._extra_fb, alpha=(255 - self._bg_update_blend))
+            img.blend(self._extra_fb, alpha=(255 - self._mot_conf.bg_update_blend()))
             self._extra_fb.draw_image(img)
         img.difference(self._extra_fb)
         hist = img.get_histogram()
-        diff = hist.get_percentile(0.99).l_value - hist.get_percentile(0.90).l_value
-        return diff > self._trigger_threshold
+        diff = (hist.get_percentile(
+            self._mot_conf.hist_high_percentile()).l_value -
+                hist.get_percentile(self._mot_conf.hist_low_percentile()).l_value)
+        return diff > self._mot_conf.trigger_threshold()
 
     async def detect_motion_async_lepton(self):
         #img = await self._snapshot_async(self.csi1)
         img = self._current_frame_lepton
         if img is not None:
             self._frame_count += 1
-            if self._frame_count > self._bg_update_frames:
+            if self._frame_count > self._mot_conf.bg_update_frames():
                 self._frame_count = 0
-                img.blend(self._extra_fb, alpha=(255 - self._bg_update_blend))
+                img.blend(self._extra_fb, alpha=(255 - self._mot_conf.bg_update_blend()))
                 self._extra_fb.draw_image(img)
             img.difference(self._extra_fb)
             hist = img.get_histogram()
-            diff = hist.get_percentile(0.99).l_value - hist.get_percentile(0.90).l_value
-            return diff > self._trigger_threshold
+            diff = (hist.get_percentile(
+                self._mot_conf.hist_high_percentile()).l_value -
+                    hist.get_percentile(self._mot_conf.hist_low_percentile()).l_value)
+            return diff > self._mot_conf.trigger_threshold()
         return False
 
     async def _snapshot_async(self, camera):

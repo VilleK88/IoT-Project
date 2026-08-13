@@ -23,8 +23,6 @@ class NetworkManager:
         self._wlan = network.WLAN(network.STA_IF)
         self._wlan.active(True)
 
-        self._backoff_s = (1, 2, 4, 8, 16, 32, 60)
-
     def initialize(self):
         self.connect()
         self._sync_time()
@@ -35,21 +33,21 @@ class NetworkManager:
 
         while not self._wlan.isconnected():
             print('Trying to connect to "{:s}"...'.format(self._ssid))
-            time.sleep_ms(1000)
+            time.sleep_ms(self._upload_config.connect_poll_ms())
 
         # A valid IP address should now be assigned by DHCP.
         #print("WiFi connected:", self._wlan.ifconfig())
         print("WiFi connected")
 
     async def reconnect(self):
-        for delay in self._backoff_s:
+        for delay in self._upload_config.backoff_s():
             self._wlan.disconnect()
             self._wlan.connect(self._ssid, self._key)
-            deadline = time.ticks_add(time.ticks_ms(), 10_000)
+            deadline = time.ticks_add(time.ticks_ms(), self._upload_config.reconnect_timeout_ms())
             while not self._wlan.isconnected():
                 if time.ticks_diff(deadline, time.ticks_ms()) <= 0:
                     break
-                await asyncio.sleep_ms(100)
+                await asyncio.sleep_ms(self._upload_config.reconnect_poll_ms())
             if self._wlan.isconnected():
                 print("WiFi reconnected")
                 return True
@@ -60,7 +58,7 @@ class NetworkManager:
     async def radio_power_cycle(self):
         print("Power cycling WiFi interface")
         self._wlan.active(False)
-        await asyncio.sleep(1)
+        await asyncio.sleep(self._upload_config.radio_restart_delay_s())
         self._wlan.active(True)
         return await self.reconnect()
 
@@ -70,7 +68,7 @@ class NetworkManager:
 
     async def upload_task(self):
         # Allow both camera interfaces and the first prebuffer cycle to stabilize.
-        await asyncio.sleep_ms(10_000)
+        await asyncio.sleep_ms(self._upload_config.startup_delay_ms())
         while True:
             if self._wlan.isconnected():
                 await self._upload_mjpeg_files()
@@ -92,7 +90,7 @@ class NetworkManager:
                     self._tools.cleanup_memory()
                     self._tools.print_memory_status("Memory after successful upload cleanup")
                 # Give the network stack time to release TLS resources.
-                await asyncio.sleep_ms(2000)
+                await asyncio.sleep_ms(self._upload_config.post_upload_delay_ms())
 
     # Uploads an MJPEG file to AWS S3 using a presigned URL.
     async def upload_mjpeg(self, filename):
@@ -113,7 +111,9 @@ class NetworkManager:
 
         try:
             print("Before async TLS connection")
-            reader, writer = await asyncio.open_connection(host, 443, ssl=True)
+            reader, writer = await asyncio.open_connection(
+                host, self._upload_config.https_port(), ssl=True
+            )
             print("Async TLS connection opened")
             # Build the HTTP PUT request header.
             # The presigned URL already contains the authentication
@@ -132,13 +132,13 @@ class NetworkManager:
             upload_start_time = time.ticks_ms()
 
             bytes_sent = 0
-            next_progress_print = 1024 * 1024
+            next_progress_print = self._upload_config.progress_interval_bytes()
             # Stream the file directly from storage to S3 in blocks
             # instead of loading the complete MJPEG file into RAM.
             print("Starting file transfer")
             with open(filename, "rb") as file:
                 while True:
-                    chunk = file.read(4096)  # Tested options: 4096, 8192, 16384, 32768
+                    chunk = file.read(self._upload_config.upload_chunk_size())  # Tested options: 4096, 8192, 16384, 32768
                     # An empty read indicates that the end of the file
                     # has been reached.
                     if not chunk:
@@ -150,7 +150,7 @@ class NetworkManager:
 
                     if bytes_sent >= next_progress_print:
                         print("Uploaded KiB:", bytes_sent // 1024)
-                        next_progress_print += 1024 * 1024
+                        next_progress_print += self._upload_config.progress_interval_bytes()
 
             # Read the first line of the HTTP response, for example:
             # HTTP/1.1 200 OK
@@ -199,7 +199,9 @@ class NetworkManager:
 
         try:
             print("Before async POST connection")
-            reader, writer = await asyncio.open_connection(host, 443, ssl=True)
+            reader, writer = await asyncio.open_connection(
+                host, self._upload_config.https_port(), ssl=True
+            )
             print("Async POST connection opened")
 
             # Build the HTTP POST request header.

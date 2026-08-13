@@ -5,7 +5,6 @@ class FileManager:
     def __init__(self, storage_config):
         self._storage_config = storage_config
         self._vid_count = 0
-        self._motion_capture_dir = "/sdcard/motion_capture"
 
     def initialize(self):
         self._prepare_directories()
@@ -20,12 +19,19 @@ class FileManager:
     # Loads the next available file numbers from the existing files
     # on the SD card.
     def _load_file_counters(self):
-        # Continue numbering from the highest existing file number
-        self._vid_count = self._get_next_file_num(
+        # Get the next available file number for each camera.
+        vid_count_pag = self._get_next_file_num(
             self._storage_config.vid_dir(),
             self._storage_config.video_prefix_pag(),
             self._storage_config.vid_suffix()
         )
+        vid_count_lepton = self._get_next_file_num(
+            self._storage_config.vid_dir(),
+            self._storage_config.video_prefix_lepton(),
+            self._storage_config.vid_suffix()
+        )
+        # Use the highest next available number to prevent filename conflicts between both cameras.
+        self._vid_count = max(vid_count_pag, vid_count_lepton)
 
     # Creates a directory if it does not already exist.
     def _create_directory(self, path):
@@ -190,12 +196,12 @@ class FileManager:
         print("Indexed frames:", len(index_entries))
 
     def get_files(self):
-        directory = os.listdir(self._motion_capture_dir)
+        directory = os.listdir(self._storage_config.vid_dir())
         if directory:
             mjpeg_files = []
             for file in directory:
                 if file.lower().endswith(".mjpeg"):
-                    filename = self._motion_capture_dir + "/" + file
+                    filename = self._storage_config.vid_dir() + "/" + file
                     mjpeg_files.append(filename)
             print("Directory is not empty.")
             return mjpeg_files
