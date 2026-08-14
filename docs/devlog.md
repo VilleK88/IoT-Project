@@ -817,3 +817,12 @@ Storage Quotas, Persistent Logging and Watchdog Integration
 - Added periodic garbage collection when the PAG7936 circular frame buffer wraps to reduce memory pressure during concurrent buffering and uploads.
 - Added camera ID, event ID and sensor metadata to MJPEG upload requests in preparation for organizing paired PAG7936 and Lepton recordings on AWS.
 - Estimated SD card recording capacity based on real 60-second recordings: approximately 410 complete dual-camera events (~820 MJPEG files) on 29.6 GB of storage. A full 60-second event uses approximately 74 MB for the PAG7936 recording and 1.2 MB for the Lepton recording (~75 MB combined).
+
+## 2026-08-14
+Improved long-term system stability
+
+- Added periodic garbage collection inside the video recording loop to reclaim temporary allocations during recording.
+- Resolved the memory-related instability that caused the embedded system to crash during extended operation.
+- Verified over 8 hours of uninterrupted operation with repeated dual-camera recordings and the hardware watchdog enabled.
+- Re-enabled the network upload task and verified over 3 hours of uninterrupted operation with recording, buffering, watchdog and uploads active.
+- Confirmed the system remained operational until the test was manually stopped.

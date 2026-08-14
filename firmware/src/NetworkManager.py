@@ -116,8 +116,7 @@ class NetworkManager:
     # Uploads an MJPEG file to AWS S3 using a presigned URL.
     async def upload_mjpeg(self, filename):
         self._tools.cleanup_memory()
-        self._tools.print_memory_status("Memory after cleanup")
-        print("Waiting before upload")
+        self._tools.print_memory_status("Memory after cleanup -> next uploading")
         metadata = self._file_manager.get_video_metadata(filename)
         data = {
             "camera_id": self._camera_config.camera_id(),
@@ -137,11 +136,9 @@ class NetworkManager:
         writer = None
 
         try:
-            print("Before async TLS connection")
             reader, writer = await asyncio.open_connection(
                 host, self._upload_config.https_port(), ssl=True
             )
-            print("Async TLS connection opened")
             # Build the HTTP PUT request header.
             # The presigned URL already contains the authentication
             # parameters required by S3.
@@ -162,7 +159,6 @@ class NetworkManager:
             next_progress_print = self._upload_config.progress_interval_bytes()
             # Stream the file directly from storage to S3 in blocks
             # instead of loading the complete MJPEG file into RAM.
-            print("Starting file transfer")
             with open(filename, "rb") as file:
                 while True:
                     chunk = file.read(self._upload_config.upload_chunk_size())  # Tested options: 4096, 8192, 16384, 32768
@@ -195,7 +191,6 @@ class NetworkManager:
                 print("S3 error response:", response_body)
                 raise OSError("MJPEG upload failed")
 
-            print("MJPEG upload successful")
             self._log_manager.info(f"{filename} uploaded successfully")
             # Calculate the total upload duration and average transfer speed.
             upload_duration_ms = time.ticks_diff(time.ticks_ms(), upload_start_time)
@@ -226,11 +221,9 @@ class NetworkManager:
         writer = None
 
         try:
-            print("Before async POST connection")
             reader, writer = await asyncio.open_connection(
                 host, self._upload_config.https_port(), ssl=True
             )
-            print("Async POST connection opened")
 
             # Build the HTTP POST request header.
             request = (
@@ -244,16 +237,11 @@ class NetworkManager:
             ).format(path, host, len(body), body)
 
             # Send the request headers and JSON body.
-            print("POST 1: writing request")
             writer.write(request.encode())
-            print("POST 2: draining")
             await writer.drain()
-            print("POST 3: drained")
 
             # Read the HTTP status line.
-            print("POST 4: reading status")
             status_line = await reader.readline()
-            print("POST 5: status:", status_line)
 
             if not status_line:
                 raise OSError("No response received")
@@ -263,19 +251,15 @@ class NetworkManager:
                     "HTTP POST failed: {}".format(status_line)
                 )
 
-            print("POST 6: reading headers")
             # Skip HTTP response headers.
             while True:
                 line = await reader.readline()
 
                 if line == b"\r\n":
                     break
-            print("POST 7: headers complete")
 
             # Read and decode the JSON response body.
-            print("POST 8: reading body")
             response_body = await reader.read()
-            print("POST 9: body received")
             return json.loads(response_body)
 
         except Exception as error:

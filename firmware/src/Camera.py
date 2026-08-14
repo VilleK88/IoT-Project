@@ -140,9 +140,9 @@ class Camera:
     # Records an MJPEG video beginning with the buffered frames
     # followed by live RGB frames.
     def record_video_and_monitor(self):
-        self._tools.print_memory_status("Before recording with prebuffer")
         self._tools.cleanup_memory()
         self._tools.print_memory_status("Memory After cleanup")
+        self._led.on()  # Turn on the recording status LED.
 
         # Create a new MJPEG file and prepare the camera for recording.
         filename_pag, video_pag = self.create_motion_video(
@@ -163,15 +163,11 @@ class Camera:
 
         try:
             # Write the buffered RGB frames before switching the PAG7936 to HD mode.
-            print("Before write_prebuffer_with_catchup()")
             saved_frames_pag, saved_frames_lepton = (
                 self.write_prebuffer_with_catchup(video_pag, video_lepton)
             )
-            print("After write_prebuffer_with_catchup()")
 
-            print("Before start_recording_state()")
             self.start_recording_state()
-            print("After start_recording_state()")
 
             last_live_frame_time = time.ticks_ms()
             last_motion_check = time.ticks_ms()
@@ -206,6 +202,9 @@ class Camera:
                     # Check for movement at the configured interval.
                     if time.ticks_diff(now, last_motion_check) >= self._mot_conf.chk_mot_ms():
                         last_motion_check = now
+                        # Periodically reclaim temporary allocations created during recording
+                        # without running garbage collection on every captured frame.
+                        self._tools.cleanup_memory()
                         # Reset the no-motion timer whenever movement is detected.
                         if self._detect_motion_lepton():
                             last_motion_time = now
@@ -226,9 +225,8 @@ class Camera:
             self._file_manager.patch_mjpeg_index(filename_pag)
             self._file_manager.patch_mjpeg_index(filename_lepton)
 
-            self._tools.print_memory_status("record_video_with_prebuffer done")
             self._tools.cleanup_memory()
-            self._tools.print_memory_status("Memory After cleanup")
+            self._tools.print_memory_status("record_video_with_prebuffer done. Memory After cleanup")
             self.stop_recording_state()  # Restore the default camera state after recording.
 
     # Creates a new MJPEG file for motion recording.
@@ -242,17 +240,14 @@ class Camera:
             self._file_manager.get_video_count()
         )
         print("Recording:", filename)
-        print("Before mjpeg.Mjpeg()")
         # Create and return the MJPEG video object.
         video = mjpeg.Mjpeg(filename, width=this_width, height=this_height)
-        print("After mjpeg.Mjpeg()")
         return filename, video
 
     # Enables the hardware and camera settings required for recording.
     def start_recording_state(self):
         self.csi0.framesize(csi.HD)  # 1280x800
         print("CSI resolution:", self.csi0.width(), self.csi0.height())
-        self._led.on()  # Turn on the recording status LED.
 
     # Restores the camera state after recording has finished.
     def stop_recording_state(self):
@@ -280,7 +275,6 @@ class Camera:
         saved_frames_pag = 0
         saved_frames_lepton = 0
 
-        print("Getting ordered prebuffer")
         # Retrieve the buffered frames in chronological order.
         prebuf_frames_pag, self._buf_index_pag = (
             self.get_ordered_buf_frames(self._buffer_pag, self._buf_index_pag)
@@ -289,7 +283,6 @@ class Camera:
             self.get_ordered_buf_frames(self._buffer_lepton, self._buf_index_lepton)
         )
 
-        print("Writing prebuffer frames")
         # Stores frames captured while the pre-buffer is being written.
         # These frames are appended afterwards to reduce the recording gap.
         catchup_frames_pag = []
@@ -318,7 +311,6 @@ class Camera:
                 catchup_frames_lepton.append(self._current_frame_lepton.copy())
                 last_live_frame_time_lepton = now
 
-        print("Writing catchup frames")
         # Append the frames captured during the pre-buffer write so the
         # transition from buffered video to live recording is as seamless as possible.
         for frame in catchup_frames_pag:
@@ -401,7 +393,6 @@ class Camera:
 
     # Thermal frame differencing.
     def _detect_motion_lepton(self):
-        #img = self.csi1.snapshot()
         img = self._current_frame_lepton
         self._frame_count += 1
         if self._frame_count > self._mot_conf.bg_update_frames():
