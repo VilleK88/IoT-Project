@@ -8,7 +8,7 @@ class MotionConfig:
         self._bg_update_frames = 5
         self._bg_update_blend = 128
 
-        self._min_temp_in_celsius = 20.0  # Minimum temperature represented by grayscale value 0.
+        self._min_temp_in_celsius = 25.0  # Minimum temperature represented by grayscale value 0.
         self._max_temp_in_celsius = 40.0  # Maximum temperature represented by grayscale value 255.
 
         self._hist_low_percentile = 0.90

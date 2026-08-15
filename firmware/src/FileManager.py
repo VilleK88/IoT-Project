@@ -93,7 +93,8 @@ class FileManager:
             # Calculate the playback rate and playback duration
             # stored in the MJPEG header.
             rate = (1000000 * time_scale) // us_avg
-            length = (frames * time_scale) // rate
+            # AVI stream length is the number of video frames.
+            length = frames
             # Byte offsets of the timing fields in the OpenMV MJPEG header.
             #
             # Each header field is 4 bytes (32 bits), so the offsets are calculated

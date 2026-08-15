@@ -72,7 +72,7 @@ class Camera:
         self.csi0.auto_exposure(True)
         self.csi0.auto_whitebal(True)  # Enable automatic white balance for improved image quality.
 
-        self.csi0.vflip(True)
+        #self.csi0.vflip(True)
         #self.csi0.auto_rotation(True)
 
         self._current_frame_pag = (
@@ -86,7 +86,7 @@ class Camera:
         self.csi1.pixformat(csi.GRAYSCALE)  # Set pixel format to GRAYSCALE
         self.csi1.framesize(csi.QQVGA)  # Native Lepton resolution: 160x120
 
-        self.csi1.vflip(True)
+        #self.csi1.vflip(True)
         #self.csi1.auto_rotation(True)
 
         # Enable radiometric measurement mode and map the grayscale output
@@ -141,8 +141,7 @@ class Camera:
     # followed by live RGB frames.
     def record_video_and_monitor(self):
         self._tools.cleanup_memory()
-        self._tools.print_memory_status("Memory After cleanup")
-        self._led.on()  # Turn on the recording status LED.
+        #self._tools.print_memory_status("Memory After cleanup")
 
         # Create a new MJPEG file and prepare the camera for recording.
         filename_pag, video_pag = self.create_motion_video(
@@ -163,9 +162,8 @@ class Camera:
 
         try:
             # Write the buffered RGB frames before switching the PAG7936 to HD mode.
-            saved_frames_pag, saved_frames_lepton = (
-                self.write_prebuffer_with_catchup(video_pag, video_lepton)
-            )
+            saved_frames_pag = (self.write_prebuffer_with_catchup_pag(video_pag))
+            saved_frames_lepton = (self.write_prebuffer_with_catchup_lepton(video_lepton))
 
             self.start_recording_state()
 
@@ -246,6 +244,7 @@ class Camera:
 
     # Enables the hardware and camera settings required for recording.
     def start_recording_state(self):
+        self._led.on()  # Turn on the recording status LED.
         self.csi0.framesize(csi.HD)  # 1280x800
         print("CSI resolution:", self.csi0.width(), self.csi0.height())
 
@@ -268,25 +267,19 @@ class Camera:
     # Writes the buffered frames to the MJPEG file.
     # New RGB frames are captured while the prebuffer is written
     # to reduce the gap before live recording.
-    def write_prebuffer_with_catchup(self, video_pag, video_lepton):
+    def write_prebuffer_with_catchup_pag(self, video_pag):
         last_live_frame_time_pag = time.ticks_ms()
-        last_live_frame_time_lepton = time.ticks_ms()
 
         saved_frames_pag = 0
-        saved_frames_lepton = 0
 
         # Retrieve the buffered frames in chronological order.
         prebuf_frames_pag, self._buf_index_pag = (
             self.get_ordered_buf_frames(self._buffer_pag, self._buf_index_pag)
         )
-        prebuf_frames_lepton, self._buf_index_lepton = (
-            self.get_ordered_buf_frames(self._buffer_lepton, self._buf_index_lepton)
-        )
 
         # Stores frames captured while the pre-buffer is being written.
         # These frames are appended afterwards to reduce the recording gap.
         catchup_frames_pag = []
-        catchup_frames_lepton = []
 
         # Write the buffered frames to the MJPEG file.
         for frame in prebuf_frames_pag:
@@ -302,6 +295,30 @@ class Camera:
                 catchup_frames_pag.append(self._current_frame_pag.copy())
                 last_live_frame_time_pag = now
 
+        # Append the frames captured during the pre-buffer write so the
+        # transition from buffered video to live recording is as seamless as possible.
+        for frame in catchup_frames_pag:
+            scaled_frame = self.scale_frame(frame)
+            video_pag.write(scaled_frame)
+            saved_frames_pag += 1
+
+        return saved_frames_pag
+
+    def write_prebuffer_with_catchup_lepton(self, video_lepton):
+        last_live_frame_time_lepton = time.ticks_ms()
+
+        saved_frames_lepton = 0
+
+        # Retrieve the buffered frames in chronological order.
+        prebuf_frames_lepton, self._buf_index_lepton = (
+            self.get_ordered_buf_frames(self._buffer_lepton, self._buf_index_lepton)
+        )
+
+        # Stores frames captured while the pre-buffer is being written.
+        # These frames are appended afterwards to reduce the recording gap.
+        catchup_frames_lepton = []
+
+        # Write the buffered frames to the MJPEG file.
         for frame in prebuf_frames_lepton:
             video_lepton.write(frame)
             saved_frames_lepton += 1
@@ -313,16 +330,11 @@ class Camera:
 
         # Append the frames captured during the pre-buffer write so the
         # transition from buffered video to live recording is as seamless as possible.
-        for frame in catchup_frames_pag:
-            scaled_frame = self.scale_frame(frame)
-            video_pag.write(scaled_frame)
-            saved_frames_pag += 1
-
         for frame in catchup_frames_lepton:
             video_lepton.write(frame)
             saved_frames_lepton += 1
 
-        return saved_frames_pag, saved_frames_lepton
+        return saved_frames_lepton
 
     def scale_frame(self, frame):
         self._scaled_frame.draw_image(frame, x_scale=2.0, y_scale=2.0)
@@ -394,6 +406,9 @@ class Camera:
     # Thermal frame differencing.
     def _detect_motion_lepton(self):
         img = self._current_frame_lepton
+
+        #self.highest_temperature(img)
+
         self._frame_count += 1
         if self._frame_count > self._mot_conf.bg_update_frames():
             self._frame_count = 0
@@ -407,21 +422,21 @@ class Camera:
         return diff > self._mot_conf.trigger_threshold()
 
     async def detect_motion_async_lepton(self):
-        #img = await self._snapshot_async(self.csi1)
         img = self._current_frame_lepton
-        if img is not None:
-            self._frame_count += 1
-            if self._frame_count > self._mot_conf.bg_update_frames():
-                self._frame_count = 0
-                img.blend(self._extra_fb, alpha=(255 - self._mot_conf.bg_update_blend()))
-                self._extra_fb.draw_image(img)
-            img.difference(self._extra_fb)
-            hist = img.get_histogram()
-            diff = (hist.get_percentile(
-                self._mot_conf.hist_high_percentile()).l_value -
-                    hist.get_percentile(self._mot_conf.hist_low_percentile()).l_value)
-            return diff > self._mot_conf.trigger_threshold()
-        return False
+
+        self._frame_count += 1
+        if self._frame_count > self._mot_conf.bg_update_frames():
+            self._frame_count = 0
+            img.blend(self._extra_fb, alpha=(255 - self._mot_conf.bg_update_blend()))
+            self._extra_fb.draw_image(img)
+        # Compare the current temperature-filtered frame against the
+        # temperature-filtered background frame.
+        img.difference(self._extra_fb)
+        hist = img.get_histogram()
+        diff = (hist.get_percentile(
+            self._mot_conf.hist_high_percentile()).l_value -
+                hist.get_percentile(self._mot_conf.hist_low_percentile()).l_value)
+        return diff > self._mot_conf.trigger_threshold()
 
     async def _snapshot_async(self, camera):
         while True:
@@ -437,3 +452,17 @@ class Camera:
         this_index = 0
         this_frame_time = time.ticks_ms()
         return this_index, this_frame_time
+
+    def highest_temperature(self, img):
+        stats = img.get_statistics()
+        max_gray = stats.max
+        max_temp = (
+                self._mot_conf.min_temp_in_celsius()
+                + (max_gray / 255.0)
+                * (
+                        self._mot_conf.max_temp_in_celsius()
+                        - self._mot_conf.min_temp_in_celsius()
+                )
+        )
+
+        print("Maximum thermal temperature:", max_temp)

@@ -826,3 +826,13 @@ Improved long-term system stability
 - Verified over 8 hours of uninterrupted operation with repeated dual-camera recordings and the hardware watchdog enabled.
 - Re-enabled the network upload task and verified over 3 hours of uninterrupted operation with recording, buffering, watchdog and uploads active.
 - Confirmed the system remained operational until the test was manually stopped.
+
+## 2026-08-15
+## Improved Thermal Detection and Fixed MJPEG Timing
+
+- Investigated FLIR Lepton temperature ranges for improving thermal frame differencing.
+- Added maximum-temperature measurement for testing the actual temperatures detected by the FLIR Lepton at different distances.
+- Verified that the PAG7936 5-second RAM circular pre-buffer correctly contains all 25 expected frames when an event is triggered.
+- Diagnosed an MJPEG playback issue and found an incorrect AVI stream length calculation in the custom header patching logic.
+- Fixed the AVI stream length to use the actual number of recorded frames.
+- Verified that the corrected MJPEG frame count, 5 FPS frame rate and playback duration now match correctly.

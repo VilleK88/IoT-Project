@@ -27,7 +27,7 @@ async def main():
         camera.update_frame_buffer_pag(),
         camera.update_frame_buffer_lepton(),
         camera.monitor_motion(),
-        network_manager.upload_task()
+        #network_manager.upload_task()
     )
 
 asyncio.run(main())
