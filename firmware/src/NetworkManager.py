@@ -297,14 +297,3 @@ class NetworkManager:
             path = remainder[path_start:]
 
         return host, path
-
-    # Writes the complete byte buffer to a stream.
-    # A socket write may send fewer bytes than requested, so the remaining
-    # bytes must be written until the whole buffer has been transferred.
-    def _write_all(self, stream, data):
-        offset = 0
-        while offset < len(data):
-            written = stream.write(data[offset:])
-            if written is None or written <= 0:
-                raise OSError("Socket write failed")
-            offset += written

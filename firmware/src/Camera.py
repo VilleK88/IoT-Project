@@ -10,6 +10,8 @@ import machine
 import time
 import asyncio
 import imu
+import ustruct
+import gc
 
 class Camera:
     # Initializes the camera system and all runtime resources.
@@ -91,7 +93,7 @@ class Camera:
 
         # Enable radiometric measurement mode and map the grayscale output
         # to the configured temperature range.
-        self.csi1.ioctl(csi.IOCTL_LEPTON_SET_MODE, True, True)
+        self.csi1.ioctl(csi.IOCTL_LEPTON_SET_MODE, True, False)
         self.csi1.ioctl(
             csi.IOCTL_LEPTON_SET_RANGE,
             self._mot_conf.min_temp_in_celsius(),
@@ -119,29 +121,35 @@ class Camera:
 
         self._tools.print_memory_status("After camera initialization")
 
+        self._ffc_active = False
+        self._ffc_recovery_until = None
+        self._last_ffc_check_time = 0
+        self._ffc_check_interval_ms = 1000
+
     # Returns True when it is time to perform the next motion check.
     async def monitor_motion(self):
         while True:
-            if await self.detect_motion_async_lepton():
-                print("camera.record_video()")
-                if self._file_manager.video_space_available():
-                    self._log_manager.info("Video recording started")
-                    try:
-                        self.record_video_and_monitor()
-                        self._log_manager.info("Video recording completed")
-                    except Exception as err:
-                        self._log_manager.error("Video recording failed: {}".format(err))
-                        raise
-                else:
-                    print("Video storage quota reached")
-                    self._log_manager.warning("Video storage quota reached")
+            # Do not perform frame differencing during or immediately after FFC.
+            if not self.handle_ffc():
+                if await self.detect_motion_async_lepton():
+                    print("camera.record_video()")
+                    if self._file_manager.video_space_available():
+                        self._log_manager.info("Video recording started")
+                        try:
+                            self.record_video_and_monitor()
+                            self._log_manager.info("Video recording completed")
+                        except Exception as err:
+                            self._log_manager.error("Video recording failed: {}".format(err))
+                            raise
+                    else:
+                        print("Video storage quota reached")
+                        self._log_manager.warning("Video storage quota reached")
             await asyncio.sleep_ms(self._mot_conf.chk_mot_ms())
 
     # Records an MJPEG video beginning with the buffered frames
     # followed by live RGB frames.
     def record_video_and_monitor(self):
         self._tools.cleanup_memory()
-        #self._tools.print_memory_status("Memory After cleanup")
 
         # Create a new MJPEG file and prepare the camera for recording.
         filename_pag, video_pag = self.create_motion_video(
@@ -203,12 +211,17 @@ class Camera:
                         # Periodically reclaim temporary allocations created during recording
                         # without running garbage collection on every captured frame.
                         self._tools.cleanup_memory()
-                        # Reset the no-motion timer whenever movement is detected.
-                        if self._detect_motion_lepton():
+
+                        # Ignore thermal motion detection during or immediately after FFC.
+                        if not self.handle_ffc():
+                            # Reset the no-motion timer whenever movement is detected.
+                            if self._detect_motion_lepton():
+                                last_motion_time = now
+                            # Stop recording after the configured period without movement.
+                            elif time.ticks_diff(now, last_motion_time) >= self._mot_conf.motion_timeout_ms():
+                                break
+                        else:
                             last_motion_time = now
-                        # Stop recording after the configured period without movement.
-                        elif time.ticks_diff(now, last_motion_time) >= self._mot_conf.motion_timeout_ms():
-                            break
         finally:
             video_pag.close() # Always close the MJPEG file, even if recording exits unexpectedly.
             video_lepton.close()
@@ -406,9 +419,6 @@ class Camera:
     # Thermal frame differencing.
     def _detect_motion_lepton(self):
         img = self._current_frame_lepton
-
-        #self.highest_temperature(img)
-
         self._frame_count += 1
         if self._frame_count > self._mot_conf.bg_update_frames():
             self._frame_count = 0
@@ -423,7 +433,6 @@ class Camera:
 
     async def detect_motion_async_lepton(self):
         img = self._current_frame_lepton
-
         self._frame_count += 1
         if self._frame_count > self._mot_conf.bg_update_frames():
             self._frame_count = 0
@@ -459,10 +468,87 @@ class Camera:
         max_temp = (
                 self._mot_conf.min_temp_in_celsius()
                 + (max_gray / 255.0)
-                * (
-                        self._mot_conf.max_temp_in_celsius()
-                        - self._mot_conf.min_temp_in_celsius()
-                )
+                * (self._mot_conf.max_temp_in_celsius() - self._mot_conf.min_temp_in_celsius())
         )
-
         print("Maximum thermal temperature:", max_temp)
+
+    # FFC (Flat-Field Correction) is an internal calibration process performed
+    # periodically by the FLIR Lepton thermal camera to compensate for sensor drift.
+    # FFC temporarily changes the thermal image and can therefore create large
+    # differences between consecutive frames, which frame-difference motion
+    # detection could incorrectly interpret as movement.
+    #
+    # The functions below monitor the Lepton FFC state, suspend thermal motion
+    # detection while calibration is active, wait for the image to stabilize,
+    # and then replace the old frame-difference background with a new reference.
+    def get_ffc_status(self):
+        # Read the Lepton FFC status attribute.
+        # 0x0244 identifies the FFC status attribute and 2 requests
+        # two 16-bit words (32 bits) from the Lepton.
+        data = self.csi1.ioctl(csi.IOCTL_LEPTON_GET_ATTRIBUTE, 0x0244, 2)
+        # Convert the four returned bytes into a 32-bit little-endian integer.
+        return ustruct.unpack("<I", data)[0]
+
+    def handle_ffc(self):
+        # Return True whenever thermal motion detection should be skipped.
+        # This includes the FFC itself and the post-FFC stabilization period.
+        now = time.ticks_ms()
+        # This method may be called several times per second by motion detection,
+        # but query the Lepton FFC status only once per configured interval.
+        if time.ticks_diff(now, self._last_ffc_check_time) >= self._ffc_check_interval_ms:
+            self._last_ffc_check_time = now
+            ffc_status = self.get_ffc_status()
+            # A non-zero status means that the Lepton is currently performing FFC.
+            # Motion detection must be skipped because FFC changes the thermal image
+            # and could otherwise be interpreted as movement.
+            if ffc_status != 0:
+                if not self._ffc_active:
+                    self._ffc_active = True
+                    self._log_manager.info(
+                        "FFC started - free memory: {}".format(gc.mem_free())
+                    )
+                    print("FFC started - free memory: {}".format(gc.mem_free()))
+                return True
+
+            # If FFC was active during the previous poll but is no longer active,
+            # the calibration has just finished.
+            if self._ffc_active:
+                self._ffc_active = False
+                # Reclaim temporary allocations created while handling FFC.
+                self._tools.cleanup_memory()
+                self._log_manager.info(
+                    "FFC completed - free memory after GC: {}".format(gc.mem_free())
+                )
+                print("FFC completed - free memory after GC: {}".format(gc.mem_free()))
+                # Give the thermal image five seconds to stabilize before
+                # allowing frame differencing to resume.
+                self._ffc_recovery_until = time.ticks_add(now, 5000)
+                self._log_manager.info("Lepton FFC completed")
+                return True
+        # FFC status is polled less frequently than this method is called.
+        # Keep motion detection disabled between polls while the last known
+        # Lepton state says that FFC is still active.
+        if self._ffc_active:
+            return True
+        # Keep motion detection disabled during the post-FFC recovery period
+        if self._ffc_recovery_until is not None:
+            if time.ticks_diff(self._ffc_recovery_until, now) > 0:
+                return True
+            # Recovery has finished. The old background frame was captured
+            # before FFC and is no longer a reliable reference. Replace it
+            # with the latest stabilized thermal frame.
+            self._extra_fb.draw_image(self._current_frame_lepton)
+            self._ffc_recovery_until = None
+            # Restart the periodic background-update counter because a new
+            # frame-difference reference has just been established.
+            self._frame_count = 0
+            self._log_manager.info(
+                "FFC recovery completed - free memory: {}".format(gc.mem_free())
+            )
+            print("FFC recovery completed - free memory: {}".format(gc.mem_free()))
+            # Skip the current motion check because the current thermal frame
+            # has just been installed as the new frame-difference background.
+            return True
+        # False means that no FFC or recovery is active and thermal
+        # frame-difference motion detection can safely proceed.
+        return False

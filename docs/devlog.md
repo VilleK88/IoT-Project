@@ -836,3 +836,13 @@ Improved long-term system stability
 - Diagnosed an MJPEG playback issue and found an incorrect AVI stream length calculation in the custom header patching logic.
 - Fixed the AVI stream length to use the actual number of recorded frames.
 - Verified that the corrected MJPEG frame count, 5 FPS frame rate and playback duration now match correctly.
+
+## 2026-08-16
+- Investigated the FLIR Lepton 3.5 Flat-Field Correction (FFC) behavior after periodic calibration events were found to interfere with thermal frame-difference motion detection.
+- Implemented FFC status monitoring based on an OpenMV developer example using `IOCTL_LEPTON_GET_ATTRIBUTE` with the Lepton FFC status attribute (`0x0244`): https://forums.openmv.io/t/flir-lepton-3-5-shutter/1356
+- Added logic to suspend thermal frame-difference motion detection during FFC and for a 5-second stabilization period afterwards.
+- Replaced the thermal background reference after FFC recovery so that post-calibration frames are not compared against a pre-calibration background.
+- Reduced FFC status polling to once per second to minimize unnecessary Lepton `ioctl` calls.
+
+## 2026-08-16
+a 2-second post-FFC recovery proved insufficient, so the recovery period was increased to 5 seconds, which eliminated the immediate post-FFC false triggers in testing.
