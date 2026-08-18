@@ -6,6 +6,7 @@ from src.StorageConfig import StorageConfig
 from src.Tools import Tools
 import asyncio
 import time
+import mjpeg
 
 class Camera:
     def __init__(self):
@@ -60,9 +61,23 @@ class Camera:
         return this_index
 
     # Clears the circular frame buffer after recording.
-    def clear_frame_buffer(self, this_buffer):
+    def clear_frame_buffer(self):
         for i in range(self._buf_config.buf_size()):
-            this_buffer[i] = None
-        this_index = 0
-        this_frame_time = time.ticks_ms()
-        return this_index, this_frame_time
+            self._buffer[i] = None
+        self._buffer_index = 0
+        self._last_frame_time = time.ticks_ms()
+
+    # Creates a new MJPEG file for motion recording.
+    def create_motion_video(self, file_manager, prefix, this_width : int, this_height : int):
+        # Build a unique filename using the configured folder, prefix,
+        # suffix and the next available video number.
+        filename = file_manager.build_filename(
+            self._storage_config.vid_dir(),
+            prefix,
+            self._storage_config.vid_suffix(),
+            file_manager.get_video_count()
+        )
+        print("Recording:", filename)
+        # Create and return the MJPEG video object.
+        video = mjpeg.Mjpeg(filename, width=this_width, height=this_height)
+        return filename, video

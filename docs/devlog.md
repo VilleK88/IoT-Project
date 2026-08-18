@@ -882,3 +882,15 @@ a 2-second post-FFC recovery proved insufficient, so the recovery period was inc
 - Standardized camera buffer attributes to use the shared implementation inherited from `CameraBase`.
 - Added exception handling around the state machine and ensured the recording state always resets to `PREPARE`.
 - Removed unused imports and redundant configuration dependencies after the refactoring.
+
+## 2026-08-18
+### Camera Recording Logic Cleanup
+
+- Continued refactoring the recording architecture to reduce camera-specific logic inside `CameraManager`.
+- Added camera-specific `record_frame()` methods to `CameraPag` and `CameraLepton`.
+- Moved PAG7936 recording-mode resolution switching into `CameraPag`.
+- Moved MJPEG video preparation and finalization into the individual camera classes.
+- Moved the shared MJPEG creation logic into `CameraBase` for reuse through inheritance.
+- Updated `CameraBase` to handle circular-buffer clearing and internal buffer-state reset.
+- Simplified `CameraManager` so it primarily coordinates recording states and calls camera-specific operations.
+- Removed redundant video closing, duration calculations, and unused imports from `CameraManager`.

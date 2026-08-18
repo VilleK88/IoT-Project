@@ -27,7 +27,7 @@ class CameraPag(Camera):
         #self.csi0.vflip(True)
         #self.csi0.auto_rotation(True)
 
-        self._current_frame_pag = (
+        self._current_frame = (
             self.csi0.snapshot(time=self.cam_config.pag_stabilization_ms())
         )  # Let new settings take effect.
 
@@ -44,6 +44,11 @@ class CameraPag(Camera):
         self.video_pag = None
         self.saved_frames = 0
         self.live_frames_pag = 0
+
+    def record_frame(self):
+        self._current_frame = self.csi0.snapshot()
+        self.video_pag.write(self._current_frame)
+        self.saved_frames += 1
 
     # Writes the buffered frames to the MJPEG file.
     # New RGB frames are captured while the prebuffer is written
@@ -72,8 +77,8 @@ class CameraPag(Camera):
             # compensate for the time spent saving the prebuffer.
             now = time.ticks_ms()
             if time.ticks_diff(now, last_live_frame_time_pag) >= self._frame_interval_ms:
-                self._current_frame_pag = self.csi0.snapshot()
-                catchup_frames_pag.append(self._current_frame_pag.copy())
+                self._current_frame = self.csi0.snapshot()
+                catchup_frames_pag.append(self._current_frame.copy())
                 last_live_frame_time_pag = now
 
         # Append the frames captured during the pre-buffer write so the
@@ -90,12 +95,12 @@ class CameraPag(Camera):
     # Periodically captures PAG7936 RGB frames into the circular RAM buffer.
     async def update_frame_buffer_pag(self):
         while True:
-            self._current_frame_pag = await self._snapshot_async(self.csi0)
+            self._current_frame = await self._snapshot_async(self.csi0)
             # Store a copy of the current frame in the circular buffer.
             # A copy is required because snapshot() reuses the same image buffer.
             self._buffer_index = (
                 self._save_frame(
-                    self._current_frame_pag.copy(),
+                    self._current_frame.copy(),
                     self._buffer,
                     self._buffer_index,
                 )
@@ -108,6 +113,31 @@ class CameraPag(Camera):
                 )
             # Yield control until the next prebuffer frame is due.
             await asyncio.sleep_ms(self._buf_config.frame_interval_ms())
+
+    def prepare_video(self, file_manager):
+        # Create a new MJPEG file and prepare the camera for recording.
+        self.filename_pag, self.video_pag = self.create_motion_video(
+            file_manager,
+            self._storage_config.video_prefix_pag(),
+            self.cam_config.recording_width_pag(),
+            self.cam_config.recording_height_pag(),
+        )
+
+    def finalize_video(self, file_manager):
+        self.video_pag.close()
+        duration_ms = self.saved_frames * self.frame_interval_ms()
+        file_manager.patch_mjpeg_timing(
+            self.filename_pag,
+            self.saved_frames,
+            duration_ms
+        )
+        file_manager.patch_mjpeg_index(self.filename_pag)
+
+    def start_recording_mode(self):
+        self.csi0.framesize(csi.HD)
+
+    def stop_recording_mode(self):
+        self.csi0.framesize(csi.VGA)
 
     def buffer(self):
         return self._buffer

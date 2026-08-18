@@ -40,7 +40,7 @@ class CameraLepton(Camera):
 
         # Allow the Lepton to stabilize before capturing the initial
         # background image used by thermal frame differencing.
-        self._current_frame_lepton = (
+        self._current_frame = (
             self.csi1.snapshot(time=self.cam_config.lepton_stabilization_ms())
         )
 
@@ -59,9 +59,14 @@ class CameraLepton(Camera):
         self.video_lepton = None
         self.saved_frames = 0
 
+    def record_frame(self):
+        self._current_frame = self.csi1.snapshot()
+        self.video_lepton.write(self._current_frame)
+        self.saved_frames += 1
+
     # Thermal frame differencing.
     def detect_motion_lepton(self):
-        img = self._current_frame_lepton
+        img = self._current_frame
         if img:
             self._frame_count += 1
             if self._frame_count > self._mot_conf.bg_update_frames():
@@ -77,7 +82,7 @@ class CameraLepton(Camera):
         return False
 
     async def detect_motion_async_lepton(self):
-        img = self._current_frame_lepton
+        img = self._current_frame
         if img:
             self._frame_count += 1
             if self._frame_count > self._mot_conf.bg_update_frames():
@@ -114,8 +119,8 @@ class CameraLepton(Camera):
             self.saved_frames += 1
             now = time.ticks_ms()
             if time.ticks_diff(now, last_live_frame_time_lepton) >= self._frame_interval_ms:
-                self._current_frame_lepton = self.csi1.snapshot()
-                catchup_frames_lepton.append(self._current_frame_lepton.copy())
+                self._current_frame = self.csi1.snapshot()
+                catchup_frames_lepton.append(self._current_frame.copy())
                 last_live_frame_time_lepton = now
 
         # Append the frames captured during the pre-buffer write so the
@@ -126,10 +131,10 @@ class CameraLepton(Camera):
 
     async def update_frame_buffer_lepton(self):
         while True:
-            self._current_frame_lepton = await self._snapshot_async(self.csi1)
+            self._current_frame = await self._snapshot_async(self.csi1)
             self._buffer_index = (
                 self._save_frame(
-                    self._current_frame_lepton.copy(),
+                    self._current_frame.copy(),
                     self._buffer,
                     self._buffer_index,
                 )
@@ -196,7 +201,7 @@ class CameraLepton(Camera):
             # Recovery has finished. The old background frame was captured
             # before FFC and is no longer a reliable reference. Replace it
             # with the latest stabilized thermal frame.
-            self._extra_fb.draw_image(self._current_frame_lepton)
+            self._extra_fb.draw_image(self._current_frame)
             self._ffc_recovery_until = None
             # Restart the periodic background-update counter because a new
             # frame-difference reference has just been established.
@@ -207,6 +212,25 @@ class CameraLepton(Camera):
         # False means that no FFC or recovery is active and thermal
         # frame-difference motion detection can safely proceed.
         return False
+
+    def prepare_video(self, file_manager):
+        # Create a new MJPEG file and prepare the camera for recording.
+        self.filename_lepton, self.video_lepton = self.create_motion_video(
+            file_manager,
+            self._storage_config.video_prefix_lepton(),
+            self.cam_config.width_lepton(),
+            self.cam_config.height_lepton()
+        )
+
+    def finalize_video(self, file_manager):
+        self.video_lepton.close()
+        duration_ms = self.saved_frames * self.frame_interval_ms()
+        file_manager.patch_mjpeg_timing(
+            self.filename_lepton,
+            self.saved_frames,
+            duration_ms
+        )
+        file_manager.patch_mjpeg_index(self.filename_lepton)
 
     def buffer(self):
         return self._buffer
