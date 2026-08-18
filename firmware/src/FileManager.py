@@ -1,9 +1,10 @@
+from src.StorageConfig import StorageConfig
 import os
 
 class FileManager:
     # Initializes the file manager and file numbering counters.
-    def __init__(self, storage_config):
-        self._storage_config = storage_config
+    def __init__(self):
+        self._storage_config = StorageConfig()
         self._vid_count = 0
 
     def initialize(self):

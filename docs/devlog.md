@@ -856,3 +856,17 @@ a 2-second post-FFC recovery proved insufficient, so the recovery period was inc
 - Completed an overnight stress test lasting approximately 11 hours without crashes or memory-related failures.
 - The system continued camera processing, ring-buffer operation, FFC handling, and video recording successfully throughout the test.
 - `upload_task` was disabled during this stress test to isolate and validate the camera and memory-management pipeline.
+
+## 2026-08-18
+### Camera Architecture Refactoring
+
+- Refactored the original monolithic `Camera` class into separate camera-specific classes.
+- Added `CameraBase` for shared camera functionality and configuration.
+- Added `CameraPag` for PAG7936-specific initialization, RGB buffering, frame scaling, and prebuffer handling.
+- Added `CameraLepton` for FLIR Lepton initialization, thermal buffering, motion detection, and FFC handling.
+- Added `CameraManager` to coordinate both camera instances and manage shared camera-system operations.
+- Moved common frame-buffer helper methods into `CameraBase` so they can be reused through inheritance.
+- Changed PAG7936 and Lepton frame-buffer loops to run concurrently through the camera manager.
+- Added safe handling for temporarily unavailable Lepton frames during motion detection.
+- Verified the refactored camera architecture with successful motion detection and MJPEG recording.
+- Verified PAG7936 live recording at approximately 4.84 FPS against the 5 FPS target.

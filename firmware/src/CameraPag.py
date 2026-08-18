@@ -1,0 +1,117 @@
+from src.CameraBase import Camera
+import csi
+import mjpeg
+import machine
+import image
+import time
+import imu
+import asyncio
+import gc
+
+class CameraPag(Camera):
+    def __init__(self, log_manager):
+        super().__init__()
+        self.name = "PAG7936"
+
+        self._log_manager = log_manager
+
+        # Circular RGB prebuffer state
+        self._buffer_pag = [None] * self._buf_config.buf_size()
+        self._buf_index_pag = 0
+        self._last_frame_time_pag = 0
+        self._frame_interval_ms_pag = self._buf_config.frame_interval_ms()
+        self._ring_buf_fil_count_pag = 0
+
+        # Initialize the PAG7936 RGB camera first.
+        # It continuously supplies 640x400 frames to the circular prebuffer
+        # and switches to 1280x800 when event recording begins.
+        self.csi0 = csi.CSI(stream=True)  # Create a new CSI camera object.
+        self.csi0.reset()  # Initialize and reset the connected camera sensor.
+        self.csi0.pixformat(csi.RGB565)
+        self.csi0.framesize(csi.VGA) # PAG7936 output: 640x400
+
+        self.csi0.auto_gain(True)
+        self.csi0.auto_exposure(True)
+        self.csi0.auto_whitebal(True)  # Enable automatic white balance for improved image quality.
+
+        #self.csi0.vflip(True)
+        #self.csi0.auto_rotation(True)
+
+        self._current_frame_pag = (
+            self.csi0.snapshot(time=self.cam_config.pag_stabilization_ms())
+        )  # Let new settings take effect.
+
+        # Reusable 1280x800 RGB565 frame used to scale 640x400 prebuffer
+        # frames without allocating a new large image for every frame.
+        # Allocate it before the circular buffer starts fragmenting the heap.
+        self._scaled_frame = image.Image(
+            self.cam_config.recording_width_pag(),
+            self.cam_config.recording_height_pag(),
+            csi.RGB565
+        )
+
+    # Writes the buffered frames to the MJPEG file.
+    # New RGB frames are captured while the prebuffer is written
+    # to reduce the gap before live recording.
+    def write_prebuffer_with_catchup_pag(self, video_pag):
+        last_live_frame_time_pag = time.ticks_ms()
+
+        saved_frames_pag = 0
+
+        # Retrieve the buffered frames in chronological order.
+        prebuf_frames_pag, self._buf_index_pag = (
+            self.get_ordered_buf_frames(self._buffer_pag, self._buf_index_pag)
+        )
+
+        # Stores frames captured while the pre-buffer is being written.
+        # These frames are appended afterwards to reduce the recording gap.
+        catchup_frames_pag = []
+
+        # Write the buffered frames to the MJPEG file.
+        for frame in prebuf_frames_pag:
+            scaled_frame = self.scale_frame(frame)
+            video_pag.write(scaled_frame)
+            saved_frames_pag += 1
+
+            # Periodically capture a new RGB frame while writing to
+            # compensate for the time spent saving the prebuffer.
+            now = time.ticks_ms()
+            if time.ticks_diff(now, last_live_frame_time_pag) >= self._frame_interval_ms_pag:
+                self._current_frame_pag = self.csi0.snapshot()
+                catchup_frames_pag.append(self._current_frame_pag.copy())
+                last_live_frame_time_pag = now
+
+        # Append the frames captured during the pre-buffer write so the
+        # transition from buffered video to live recording is as seamless as possible.
+        for frame in catchup_frames_pag:
+            scaled_frame = self.scale_frame(frame)
+            video_pag.write(scaled_frame)
+            saved_frames_pag += 1
+
+        return saved_frames_pag
+
+    def scale_frame(self, frame):
+        self._scaled_frame.draw_image(frame, x_scale=2.0, y_scale=2.0)
+        return self._scaled_frame
+
+    # Periodically captures PAG7936 RGB frames into the circular RAM buffer.
+    async def update_frame_buffer_pag(self):
+        while True:
+            self._current_frame_pag = await self._snapshot_async(self.csi0)
+            # Store a copy of the current frame in the circular buffer.
+            # A copy is required because snapshot() reuses the same image buffer.
+            self._buf_index_pag = (
+                self._save_frame(
+                    self._current_frame_pag.copy(),
+                    self._buffer_pag,
+                    self._buf_index_pag,
+                )
+            )
+            if self._buf_index_pag == 0:
+                self._ring_buf_fil_count_pag += 1
+                print(f"After PAG7936 ring buffer filled {self._ring_buf_fil_count_pag}")
+                self._log_manager.info(
+                    "Memory after ring buffer filled: {}".format(gc.mem_free())
+                )
+            # Yield control until the next prebuffer frame is due.
+            await asyncio.sleep_ms(self._buf_config.frame_interval_ms())
