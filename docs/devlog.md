@@ -870,3 +870,15 @@ a 2-second post-FFC recovery proved insufficient, so the recovery period was inc
 - Added safe handling for temporarily unavailable Lepton frames during motion detection.
 - Verified the refactored camera architecture with successful motion detection and MJPEG recording.
 - Verified PAG7936 live recording at approximately 4.84 FPS against the 5 FPS target.
+
+## 2026-08-18
+### Recording State Machine Refactoring
+
+- Replaced the previous recording workflow with a state machine managed by `CameraManager`.
+- Added `PREPARE`, `PREBUFFER`, `RECORDING`, and `FINALIZING` recording states.
+- Split the recording lifecycle into dedicated state methods for file preparation, prebuffer writing, live recording, and finalization.
+- Kept the recording state machine synchronous while asynchronous tasks continue to handle frame buffering and motion monitoring.
+- Integrated both PAG7936 and Lepton recording operations into the shared state-machine flow.
+- Standardized camera buffer attributes to use the shared implementation inherited from `CameraBase`.
+- Added exception handling around the state machine and ensured the recording state always resets to `PREPARE`.
+- Removed unused imports and redundant configuration dependencies after the refactoring.

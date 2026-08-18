@@ -1,10 +1,7 @@
 from src.CameraBase import Camera
 import csi
-import mjpeg
-import machine
 import image
 import time
-import imu
 import asyncio
 import gc
 
@@ -14,13 +11,6 @@ class CameraPag(Camera):
         self.name = "PAG7936"
 
         self._log_manager = log_manager
-
-        # Circular RGB prebuffer state
-        self._buffer_pag = [None] * self._buf_config.buf_size()
-        self._buf_index_pag = 0
-        self._last_frame_time_pag = 0
-        self._frame_interval_ms_pag = self._buf_config.frame_interval_ms()
-        self._ring_buf_fil_count_pag = 0
 
         # Initialize the PAG7936 RGB camera first.
         # It continuously supplies 640x400 frames to the circular prebuffer
@@ -50,17 +40,22 @@ class CameraPag(Camera):
             csi.RGB565
         )
 
+        self.filename_pag = None
+        self.video_pag = None
+        self.saved_frames = 0
+        self.live_frames_pag = 0
+
     # Writes the buffered frames to the MJPEG file.
     # New RGB frames are captured while the prebuffer is written
     # to reduce the gap before live recording.
-    def write_prebuffer_with_catchup_pag(self, video_pag):
+    def write_prebuffer_with_catchup_pag(self):
         last_live_frame_time_pag = time.ticks_ms()
 
-        saved_frames_pag = 0
+        self.saved_frames = 0
 
         # Retrieve the buffered frames in chronological order.
-        prebuf_frames_pag, self._buf_index_pag = (
-            self.get_ordered_buf_frames(self._buffer_pag, self._buf_index_pag)
+        prebuf_frames_pag, self._buffer_index = (
+            self.get_ordered_buf_frames(self._buffer, self._buffer_index)
         )
 
         # Stores frames captured while the pre-buffer is being written.
@@ -70,13 +65,13 @@ class CameraPag(Camera):
         # Write the buffered frames to the MJPEG file.
         for frame in prebuf_frames_pag:
             scaled_frame = self.scale_frame(frame)
-            video_pag.write(scaled_frame)
-            saved_frames_pag += 1
+            self.video_pag.write(scaled_frame)
+            self.saved_frames += 1
 
             # Periodically capture a new RGB frame while writing to
             # compensate for the time spent saving the prebuffer.
             now = time.ticks_ms()
-            if time.ticks_diff(now, last_live_frame_time_pag) >= self._frame_interval_ms_pag:
+            if time.ticks_diff(now, last_live_frame_time_pag) >= self._frame_interval_ms:
                 self._current_frame_pag = self.csi0.snapshot()
                 catchup_frames_pag.append(self._current_frame_pag.copy())
                 last_live_frame_time_pag = now
@@ -85,10 +80,8 @@ class CameraPag(Camera):
         # transition from buffered video to live recording is as seamless as possible.
         for frame in catchup_frames_pag:
             scaled_frame = self.scale_frame(frame)
-            video_pag.write(scaled_frame)
-            saved_frames_pag += 1
-
-        return saved_frames_pag
+            self.video_pag.write(scaled_frame)
+            self.saved_frames += 1
 
     def scale_frame(self, frame):
         self._scaled_frame.draw_image(frame, x_scale=2.0, y_scale=2.0)
@@ -100,18 +93,33 @@ class CameraPag(Camera):
             self._current_frame_pag = await self._snapshot_async(self.csi0)
             # Store a copy of the current frame in the circular buffer.
             # A copy is required because snapshot() reuses the same image buffer.
-            self._buf_index_pag = (
+            self._buffer_index = (
                 self._save_frame(
                     self._current_frame_pag.copy(),
-                    self._buffer_pag,
-                    self._buf_index_pag,
+                    self._buffer,
+                    self._buffer_index,
                 )
             )
-            if self._buf_index_pag == 0:
-                self._ring_buf_fil_count_pag += 1
-                print(f"After PAG7936 ring buffer filled {self._ring_buf_fil_count_pag}")
+            if self._buffer_index == 0:
+                self._ring_buf_fil_count += 1
+                print(f"After PAG7936 ring buffer filled {self._ring_buf_fil_count}")
                 self._log_manager.info(
                     "Memory after ring buffer filled: {}".format(gc.mem_free())
                 )
             # Yield control until the next prebuffer frame is due.
             await asyncio.sleep_ms(self._buf_config.frame_interval_ms())
+
+    def buffer(self):
+        return self._buffer
+
+    def buffer_index(self):
+        return self._buffer_index
+
+    def last_frame_time(self):
+        return self._last_frame_time
+
+    def frame_interval_ms(self):
+        return self._frame_interval_ms
+
+    def ring_buffer_fill_count(self):
+        return self._ring_buf_fil_count

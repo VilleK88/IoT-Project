@@ -2,10 +2,7 @@ from src.CameraBase import Camera
 import csi
 import time
 import image
-import mjpeg
-import machine
 import ustruct
-import imu
 import asyncio
 import gc
 
@@ -18,13 +15,6 @@ class CameraLepton(Camera):
 
         # Motion-check timing
         self._last_motion_check_time = time.ticks_ms()
-
-        # Circular Thermal prebuffer state
-        self._buffer_lepton = [None] * self._buf_config.buf_size()
-        self._buf_index_lepton = 0
-        self._last_frame_time_lepton = 0
-        self._frame_interval_ms_lepton = self._buf_config.frame_interval_ms()
-        self._ring_buf_fil_count_lepton = 0
 
         # Thermal frame-differencing settings
         self._frame_count = 0
@@ -48,10 +38,6 @@ class CameraLepton(Camera):
             self._mot_conf.max_temp_in_celsius()
         )
 
-        # Allow the Lepton to stabilize.
-        """self.csi1.snapshot(time=self.cam_config.lepton_stabilization_ms())
-        # Capture the actual first frame after stabilization.
-        self._current_frame_lepton = self.csi1.snapshot()"""
         # Allow the Lepton to stabilize before capturing the initial
         # background image used by thermal frame differencing.
         self._current_frame_lepton = (
@@ -68,6 +54,10 @@ class CameraLepton(Camera):
         self._last_ffc_check_time = 0
         self._ffc_check_interval_ms = 1000
         self._ffc_recalibration_time_ms = 5000
+
+        self.filename_lepton = None
+        self.video_lepton = None
+        self.saved_frames = 0
 
     # Thermal frame differencing.
     def detect_motion_lepton(self):
@@ -104,14 +94,14 @@ class CameraLepton(Camera):
             return diff > self._mot_conf.trigger_threshold()
         return False
 
-    def write_prebuffer_with_catchup_lepton(self, video_lepton):
+    def write_prebuffer_with_catchup_lepton(self):
         last_live_frame_time_lepton = time.ticks_ms()
 
-        saved_frames_lepton = 0
+        self.saved_frames = 0
 
         # Retrieve the buffered frames in chronological order.
-        prebuf_frames_lepton, self._buf_index_lepton = (
-            self.get_ordered_buf_frames(self._buffer_lepton, self._buf_index_lepton)
+        prebuf_frames_lepton, self._buffer_index = (
+            self.get_ordered_buf_frames(self._buffer, self._buffer_index)
         )
 
         # Stores frames captured while the pre-buffer is being written.
@@ -120,10 +110,10 @@ class CameraLepton(Camera):
 
         # Write the buffered frames to the MJPEG file.
         for frame in prebuf_frames_lepton:
-            video_lepton.write(frame)
-            saved_frames_lepton += 1
+            self.video_lepton.write(frame)
+            self.saved_frames += 1
             now = time.ticks_ms()
-            if time.ticks_diff(now, last_live_frame_time_lepton) >= self._frame_interval_ms_lepton:
+            if time.ticks_diff(now, last_live_frame_time_lepton) >= self._frame_interval_ms:
                 self._current_frame_lepton = self.csi1.snapshot()
                 catchup_frames_lepton.append(self._current_frame_lepton.copy())
                 last_live_frame_time_lepton = now
@@ -131,24 +121,22 @@ class CameraLepton(Camera):
         # Append the frames captured during the pre-buffer write so the
         # transition from buffered video to live recording is as seamless as possible.
         for frame in catchup_frames_lepton:
-            video_lepton.write(frame)
-            saved_frames_lepton += 1
-
-        return saved_frames_lepton
+            self.video_lepton.write(frame)
+            self.saved_frames += 1
 
     async def update_frame_buffer_lepton(self):
         while True:
             self._current_frame_lepton = await self._snapshot_async(self.csi1)
-            self._buf_index_lepton = (
+            self._buffer_index = (
                 self._save_frame(
                     self._current_frame_lepton.copy(),
-                    self._buffer_lepton,
-                    self._buf_index_lepton,
+                    self._buffer,
+                    self._buffer_index,
                 )
             )
-            if self._buf_index_lepton == 0:
-                self._ring_buf_fil_count_lepton += 1
-                print(f"After Lepton-3.5 ring buffer filled {self._ring_buf_fil_count_lepton}")
+            if self._buffer_index == 0:
+                self._ring_buf_fil_count += 1
+                print(f"After Lepton-3.5 ring buffer filled {self._ring_buf_fil_count}")
                 self._log_manager.info(
                     "Memory after ring buffer filled: {}".format(gc.mem_free())
                 )
@@ -219,3 +207,18 @@ class CameraLepton(Camera):
         # False means that no FFC or recovery is active and thermal
         # frame-difference motion detection can safely proceed.
         return False
+
+    def buffer(self):
+        return self._buffer
+
+    def buffer_index(self):
+        return self._buffer_index
+
+    def last_frame_time(self):
+        return self._last_frame_time
+
+    def frame_interval_ms(self):
+        return self._frame_interval_ms
+
+    def ring_buffer_fill_count(self):
+        return self._ring_buf_fil_count
