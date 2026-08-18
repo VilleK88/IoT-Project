@@ -40,9 +40,7 @@ class CameraManager:
         self._led = machine.LED("LED_RED")
 
         self._camera_pag = camera_pag
-        self._tools.print_memory_status("After PAG7936 init")
         self._camera_lepton = camera_lepton
-        self._tools.print_memory_status("After Lepton init")
 
         self._live_recording_start = 0
 
@@ -115,7 +113,7 @@ class CameraManager:
         self._camera_pag.live_frames_pag = 0
         self._live_recording_start = time.ticks_ms()
 
-        # Continue recording RGB frames until no motion is detected or the maximum recording time is reached.
+        # Continue recording frames until no motion is detected or the maximum recording time is reached.
         while (time.ticks_diff(time.ticks_ms(),
                               recording_start_time) <
                self._camera_pag.cam_config.max_recording_time_ms()):
@@ -164,11 +162,11 @@ class CameraManager:
             actual_fps = (
                     self._camera_pag.live_frames_pag * 1000 / live_recording_duration
             )
+
         print("LIVE PAG:", self._camera_pag.live_frames_pag,
             "frames,", live_recording_duration,
             "ms, FPS:", actual_fps
         )
-
         self._log_manager.info(
             "LIVE PAG: {} frames, {} ms, FPS: {}".format(
                 self._camera_pag.live_frames_pag,
@@ -178,7 +176,6 @@ class CameraManager:
         )
 
         self._led.off()
-
         self._camera_pag.finalize_video(self._file_manager)
         self._camera_lepton.finalize_video(self._file_manager)
 
@@ -187,7 +184,6 @@ class CameraManager:
             "Memory after recording: {}".format(gc.mem_free())
         )
         self.stop_recording_state()  # Restore the default camera state after recording.
-
         return RecordState.PREPARE
 
     # Enables the hardware and camera settings required for recording.

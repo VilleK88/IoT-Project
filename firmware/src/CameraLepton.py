@@ -59,6 +59,8 @@ class CameraLepton(Camera):
         self.video_lepton = None
         self.saved_frames = 0
 
+        self._tools.print_memory_status("After Lepton init")
+
     def record_frame(self):
         self._current_frame = self.csi1.snapshot()
         self.video_lepton.write(self._current_frame)

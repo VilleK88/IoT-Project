@@ -45,6 +45,8 @@ class CameraPag(Camera):
         self.saved_frames = 0
         self.live_frames_pag = 0
 
+        self._tools.print_memory_status("After PAG7936 init")
+
     def record_frame(self):
         self._current_frame = self.csi0.snapshot()
         self.video_pag.write(self._current_frame)
