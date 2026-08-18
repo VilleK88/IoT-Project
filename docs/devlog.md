@@ -846,3 +846,13 @@ Improved long-term system stability
 
 ## 2026-08-16
 a 2-second post-FFC recovery proved insufficient, so the recovery period was increased to 5 seconds, which eliminated the immediate post-FFC false triggers in testing.
+
+## 2026-08-18
+### Garbage Collection Improvements
+
+- Configured MicroPython garbage collection with a 10 MB allocation threshold.
+- Removed manual garbage collection calls from the `Camera` class.
+- Automatic garbage collection now handles memory cleanup instead of manually triggering collection in memory-heavy camera operations.
+- Completed an overnight stress test lasting approximately 11 hours without crashes or memory-related failures.
+- The system continued camera processing, ring-buffer operation, FFC handling, and video recording successfully throughout the test.
+- `upload_task` was disabled during this stress test to isolate and validate the camera and memory-management pipeline.

@@ -108,14 +108,14 @@ class NetworkManager:
                     self._file_manager.delete_file(file)
                     print(f"File deleted {file}")
                     self._log_manager.info(f"File deleted {file}")
-                    self._tools.cleanup_memory()
+                    #self._tools.cleanup_memory()
                     self._tools.print_memory_status("Memory after successful upload cleanup")
                 # Give the network stack time to release TLS resources.
                 await asyncio.sleep_ms(self._upload_config.post_upload_delay_ms())
 
     # Uploads an MJPEG file to AWS S3 using a presigned URL.
     async def upload_mjpeg(self, filename):
-        self._tools.cleanup_memory()
+        #self._tools.cleanup_memory()
         self._tools.print_memory_status("Memory after cleanup -> next uploading")
         metadata = self._file_manager.get_video_metadata(filename)
         data = {
@@ -174,6 +174,7 @@ class NetworkManager:
                     if bytes_sent >= next_progress_print:
                         print("Uploaded KiB:", bytes_sent // 1024)
                         next_progress_print += self._upload_config.progress_interval_bytes()
+                        #self._tools.cleanup_memory()
 
             # Read the first line of the HTTP response, for example:
             # HTTP/1.1 200 OK

@@ -65,7 +65,7 @@ class Camera:
         # Initialize the PAG7936 RGB camera first.
         # It continuously supplies 640x400 frames to the circular prebuffer
         # and switches to 1280x800 when event recording begins.
-        self.csi0 = csi.CSI()  # Create a new CSI camera object.
+        self.csi0 = csi.CSI(stream=True)  # Create a new CSI camera object.
         self.csi0.reset()  # Initialize and reset the connected camera sensor.
         self.csi0.pixformat(csi.RGB565)
         self.csi0.framesize(csi.VGA) # PAG7936 output: 640x400
@@ -81,9 +81,11 @@ class Camera:
             self.csi0.snapshot(time=self._cam_config.pag_stabilization_ms())
         )  # Let new settings take effect.
 
+        self._tools.print_memory_status("After PAG7936 init")
+
         # Initialize the FLIR Lepton thermal camera second.
         # Use a soft reset so the already initialized PAG7936 remains active.
-        self.csi1 = csi.CSI(cid=csi.LEPTON)
+        self.csi1 = csi.CSI(cid=csi.LEPTON, stream=False)
         self.csi1.reset(hard=False)  # Soft reset and initialize the sensor
         self.csi1.pixformat(csi.GRAYSCALE)  # Set pixel format to GRAYSCALE
         self.csi1.framesize(csi.QQVGA)  # Native Lepton resolution: 160x120
@@ -105,7 +107,13 @@ class Camera:
         self._current_frame_lepton = (
             self.csi1.snapshot(time=self._cam_config.lepton_stabilization_ms())
         )
+
+        self._tools.print_memory_status("After Lepton init")
+
         self._extra_fb = image.Image(self.csi1.width(), self.csi1.height(), self.csi1.pixformat())
+
+        self._tools.print_memory_status("After extra framebuffer allocation")
+
         print("About to save background image...")
         self._extra_fb.draw_image(self.csi1.snapshot())
         print("Saved background image - Now frame differencing!")
@@ -119,12 +127,13 @@ class Camera:
             csi.RGB565
         )
 
-        self._tools.print_memory_status("After camera initialization")
+        self._tools.print_memory_status("After scaled frame allocation")
 
         self._ffc_active = False
         self._ffc_recovery_until = None
         self._last_ffc_check_time = 0
         self._ffc_check_interval_ms = 1000
+        self._ffc_recalibration_time_ms = 5000
 
     # Returns True when it is time to perform the next motion check.
     async def monitor_motion(self):
@@ -149,7 +158,10 @@ class Camera:
     # Records an MJPEG video beginning with the buffered frames
     # followed by live RGB frames.
     def record_video_and_monitor(self):
-        self._tools.cleanup_memory()
+        self._tools.print_memory_status("Memory before recording")
+        self._log_manager.info(
+            "Memory before recording: {}".format(gc.mem_free())
+        )
 
         # Create a new MJPEG file and prepare the camera for recording.
         filename_pag, video_pag = self.create_motion_video(
@@ -181,6 +193,9 @@ class Camera:
             last_motion_time = time.ticks_ms()
             last_watchdog_feed = time.ticks_ms()
 
+            live_frames_pag = 0
+            live_recording_start = time.ticks_ms()
+
             # Continue recording RGB frames until no motion is detected or the maximum recording time is reached.
             while time.ticks_diff(time.ticks_ms(), recording_start_time) < self._cam_config.max_recording_time_ms():
                 now = time.ticks_ms()
@@ -205,13 +220,11 @@ class Camera:
                     saved_frames_pag += 1
                     saved_frames_lepton += 1
 
+                    live_frames_pag += 1
+
                     # Check for movement at the configured interval.
                     if time.ticks_diff(now, last_motion_check) >= self._mot_conf.chk_mot_ms():
                         last_motion_check = now
-                        # Periodically reclaim temporary allocations created during recording
-                        # without running garbage collection on every captured frame.
-                        self._tools.cleanup_memory()
-
                         # Ignore thermal motion detection during or immediately after FFC.
                         if not self.handle_ffc():
                             # Reset the no-motion timer whenever movement is detected.
@@ -223,6 +236,31 @@ class Camera:
                         else:
                             last_motion_time = now
         finally:
+            live_recording_duration = time.ticks_diff(
+                time.ticks_ms(),
+                live_recording_start
+            )
+
+            actual_fps = (
+                    live_frames_pag * 1000 / live_recording_duration
+            )
+            print(
+                "LIVE PAG:",
+                live_frames_pag,
+                "frames,",
+                live_recording_duration,
+                "ms, FPS:",
+                actual_fps
+            )
+
+            self._log_manager.info(
+                "LIVE PAG: {} frames, {} ms, FPS: {}".format(
+                    live_frames_pag,
+                    live_recording_duration,
+                    actual_fps
+                )
+            )
+
             video_pag.close() # Always close the MJPEG file, even if recording exits unexpectedly.
             video_lepton.close()
             self._led.off()  # Turn off the recording status LED.
@@ -236,8 +274,10 @@ class Camera:
             self._file_manager.patch_mjpeg_index(filename_pag)
             self._file_manager.patch_mjpeg_index(filename_lepton)
 
-            self._tools.cleanup_memory()
             self._tools.print_memory_status("record_video_with_prebuffer done. Memory After cleanup")
+            self._log_manager.info(
+                "Memory after recording: {}".format(gc.mem_free())
+            )
             self.stop_recording_state()  # Restore the default camera state after recording.
 
     # Creates a new MJPEG file for motion recording.
@@ -399,7 +439,10 @@ class Camera:
             this_count += 1
             print(f"After {name} ring buffer filled {this_count}")
             if name == "PAG7936":
-                self._tools.cleanup_memory()
+                self._tools.print_memory_status("Memory after ring buffer filled")
+                self._log_manager.info(
+                    "Memory after ring buffer filled: {}".format(gc.mem_free())
+                )
         return this_index, this_count
 
     # Returns the buffered frames in chronological order.
@@ -514,15 +557,13 @@ class Camera:
             # the calibration has just finished.
             if self._ffc_active:
                 self._ffc_active = False
-                # Reclaim temporary allocations created while handling FFC.
-                self._tools.cleanup_memory()
                 self._log_manager.info(
                     "FFC completed - free memory after GC: {}".format(gc.mem_free())
                 )
                 print("FFC completed - free memory after GC: {}".format(gc.mem_free()))
                 # Give the thermal image five seconds to stabilize before
                 # allowing frame differencing to resume.
-                self._ffc_recovery_until = time.ticks_add(now, 5000)
+                self._ffc_recovery_until = time.ticks_add(now, self._ffc_recalibration_time_ms)
                 self._log_manager.info("Lepton FFC completed")
                 return True
         # FFC status is polled less frequently than this method is called.
