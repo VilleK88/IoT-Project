@@ -894,3 +894,18 @@ a 2-second post-FFC recovery proved insufficient, so the recovery period was inc
 - Updated `CameraBase` to handle circular-buffer clearing and internal buffer-state reset.
 - Simplified `CameraManager` so it primarily coordinates recording states and calls camera-specific operations.
 - Removed redundant video closing, duration calculations, and unused imports from `CameraManager`.
+
+## 2026-08-20
+### Upload Stability Fix
+
+- Investigated repeated watchdog resets during S3 uploads.
+- Isolated the failure to the file-streaming phase.
+- Added WLAN connection checks between file uploads.
+- Added exception handling around the upload streaming loop.
+- Added exception handling to `write_log()` so logging failures are reported and re-raised.
+- Added post-upload memory cleanup for both successful and failed uploads.
+- Added a timeout to `writer.drain()` so stalled uploads are aborted before triggering a watchdog reset.
+- Failed uploads now keep the original file and allow the system to continue operating.
+- Verified recovery from a stalled PAG upload during stress testing.
+- Completed an almost three-hour stress test without an unintended reset.
+

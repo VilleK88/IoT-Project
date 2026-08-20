@@ -13,10 +13,7 @@ class CameraLepton(Camera):
 
         self._log_manager = log_manager
 
-        # Motion-check timing
         self._last_motion_check_time = time.ticks_ms()
-
-        # Thermal frame-differencing settings
         self._frame_count = 0
 
         # Initialize the FLIR Lepton thermal camera second.

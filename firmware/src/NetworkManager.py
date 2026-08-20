@@ -91,6 +91,7 @@ class NetworkManager:
         await asyncio.sleep_ms(self._upload_config.startup_delay_ms())
         while True:
             if self._wlan.isconnected():
+                self._log_manager.info("[DEBUG] Upload cycle started")
                 await self._upload_mjpeg_files()
             else:
                 reconnected = await self.reconnect()
@@ -102,18 +103,27 @@ class NetworkManager:
         files = self._file_manager.get_files()
         if files:
             for file in files:
-                self._tools.print_memory_status("Memory before upload")
-                upload_succeeded = await self.upload_mjpeg(file)
-                if upload_succeeded:
-                    self._file_manager.delete_file(file)
-                    print(f"File deleted {file}")
-                    self._log_manager.info(f"File deleted {file}")
-                    self._tools.print_memory_status("Memory after successful upload cleanup")
-                # Give the network stack time to release TLS resources.
-                await asyncio.sleep_ms(self._upload_config.post_upload_delay_ms())
+                if self._wlan.isconnected():
+                    self._tools.print_memory_status("Memory before upload")
+                    try:
+                        upload_succeeded = await self.upload_mjpeg(file)
+                        if upload_succeeded:
+                            self._file_manager.delete_file(file)
+                            print(f"File deleted {file}")
+                            self._log_manager.info(f"File deleted {file}")
+                    finally:
+                        self._log_manager.info("[DEBUG] Post-upload cleanup started")
+                        self._tools.cleanup_memory()
+                        self._tools.print_memory_status("Memory after successful upload cleanup")
+                        # Give the network stack time to release TLS resources.
+                        await asyncio.sleep_ms(self._upload_config.post_upload_delay_ms())
+                else:
+                    break
 
     # Uploads an MJPEG file to AWS S3 using a presigned URL.
     async def upload_mjpeg(self, filename):
+        self._log_manager.info("[DEBUG] Upload started: {}".format(filename))
+        self._tools.cleanup_memory()
         self._tools.print_memory_status("Memory after cleanup -> next uploading")
         metadata = self._file_manager.get_video_metadata(filename)
         data = {
@@ -121,9 +131,11 @@ class NetworkManager:
             "event_id": metadata["event_id"],
             "sensor": metadata["sensor"]
         }
+        self._log_manager.info("[DEBUG] Requesting presigned URL")
         # Request a presigned S3 upload URL and separate it into
         # the hostname and request path required for the HTTP request.
         upload_url = await self._get_upload_url(data)
+        self._log_manager.info("[DEBUG] Presigned URL received")
         host, path = self._parse_https_url(upload_url)
         # Read the file size for the HTTP Content-Length header.
         file_size = os.stat(filename)[6]
@@ -134,9 +146,11 @@ class NetworkManager:
         writer = None
 
         try:
+            self._log_manager.info("[DEBUG] Opening S3 TLS connection")
             reader, writer = await asyncio.open_connection(
                 host, self._upload_config.https_port(), ssl=True
             )
+            self._log_manager.info("[DEBUG] S3 TLS connected")
             # Build the HTTP PUT request header.
             # The presigned URL already contains the authentication
             # parameters required by S3.
@@ -155,27 +169,42 @@ class NetworkManager:
 
             bytes_sent = 0
             next_progress_print = self._upload_config.progress_interval_bytes()
+            self._log_manager.info("[DEBUG] File streaming started")
             # Stream the file directly from storage to S3 in blocks
             # instead of loading the complete MJPEG file into RAM.
             with open(filename, "rb") as file:
-                while True:
-                    chunk = file.read(self._upload_config.upload_chunk_size())  # Tested options: 4096, 8192, 16384, 32768
-                    # An empty read indicates that the end of the file
-                    # has been reached.
-                    if not chunk:
-                        break
-                    # Ensure the complete block is written before reading
-                    writer.write(chunk)
-                    await writer.drain()
-                    bytes_sent += len(chunk)
+                try:
+                    while True:
+                        chunk = file.read(
+                            self._upload_config.upload_chunk_size())  # Tested options: 4096, 8192, 16384, 32768
+                        # An empty read indicates that the end of the file
+                        # has been reached.
+                        if not chunk:
+                            break
+                        # Ensure the complete block is written before reading
+                        writer.write(chunk)
+                        try:
+                            await asyncio.wait_for(writer.drain(), 10)
+                        except asyncio.TimeoutError:
+                            print("Upload stream timeout")
+                            return False
+                        bytes_sent += len(chunk)
 
-                    if bytes_sent >= next_progress_print:
-                        print("Uploaded KiB:", bytes_sent // 1024)
-                        next_progress_print += self._upload_config.progress_interval_bytes()
+                        if bytes_sent >= next_progress_print:
+                            self._tools.print_memory_status(
+                                "UPLOAD progress {} KiB".format(bytes_sent // 1024)
+                            )
+                            next_progress_print += self._upload_config.progress_interval_bytes()
+                except Exception as err:
+                    print("File streaming error", err)
+                    raise
+
+            self._log_manager.info("[DEBUG] File streaming completed")
 
             # Read the first line of the HTTP response, for example:
             # HTTP/1.1 200 OK
             status_line = await reader.readline()
+            self._log_manager.info("[DEBUG] S3 response received")
             # A missing response usually means that the connection was
             # closed before S3 returned an HTTP status.
             if not status_line:
@@ -205,8 +234,10 @@ class NetworkManager:
                 try:
                     writer.close()
                     await writer.wait_closed()
+                    self._log_manager.info("[DEBUG] S3 TLS connection closed")
                 except Exception as error:
                     print("Writer close error:", error)
+                    raise
 
     # Sends a JSON POST request over HTTPS and returns the JSON response.
     async def _post_json(self, url, data):
@@ -219,9 +250,11 @@ class NetworkManager:
         writer = None
 
         try:
+            self._log_manager.info("[DEBUG] Opening presigned URL TLS connection")
             reader, writer = await asyncio.open_connection(
                 host, self._upload_config.https_port(), ssl=True
             )
+            self._log_manager.info("[DEBUG] Presigned URL TLS connected")
 
             # Build the HTTP POST request header.
             request = (
@@ -269,8 +302,10 @@ class NetworkManager:
                 try:
                     writer.close()
                     await writer.wait_closed()
+                    self._log_manager.info("[DEBUG] Presigned URL TLS connection closed")
                 except Exception as error:
                     print("Writer close error:", error)
+                    raise
 
     # Requests a temporary S3 upload URL from AWS.
     async def _get_upload_url(self, data):
@@ -280,18 +315,14 @@ class NetworkManager:
     # Parses a presigned HTTPS URL without modifying its signed path or query.
     def _parse_https_url(self, url):
         prefix = "https://"
-
         if not url.startswith(prefix):
             raise ValueError("Only HTTPS upload URLs are supported")
-
         remainder = url[len(prefix):]
         path_start = remainder.find("/")
-
         if path_start == -1:
             host = remainder
             path = "/"
         else:
             host = remainder[:path_start]
             path = remainder[path_start:]
-
         return host, path

@@ -8,7 +8,7 @@ from src.Watchdog import Watchdog
 import asyncio
 import gc
 
-gc.threshold(10_000_000)
+gc.threshold(5_000_000)  # 10_000_000 works without upload_task
 print(gc.threshold())
 
 
@@ -30,9 +30,9 @@ async def main():
 
     await asyncio.gather(
         watchdog.watchdog_task(),
-        camera_manager.update_frame_buffer_task(),
-        camera_manager.monitor_motion(),
-        #network_manager.upload_task()
+        #camera_manager.update_frame_buffer_task(),
+        #camera_manager.monitor_motion(),
+        network_manager.upload_task()
     )
 
 asyncio.run(main())

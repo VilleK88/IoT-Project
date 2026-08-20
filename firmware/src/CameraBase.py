@@ -49,16 +49,16 @@ class Camera:
         return frames, this_index
 
     # Stores a frame in the circular buffer and advances the write index.
-    def _save_frame(self, frame, this_buffer, this_index):
+    def _save_frame(self, frame, buffer, index):
         # Store the newest frame at the current write position.
-        this_buffer[this_index] = frame
+        buffer[index] = frame
         # Advance the write index and wrap back to the beginning when the
         # end of the circular buffer is reached.
-        this_index = (this_index + 1) % self._buf_config.buf_size()
+        index = (index + 1) % self._buf_config.buf_size()
         # The buffer has been completely filled once the write index wraps
         # back to the beginning. From this point onward, the oldest frames
         # will be overwritten by newer ones.
-        return this_index
+        return index
 
     # Clears the circular frame buffer after recording.
     def clear_frame_buffer(self):

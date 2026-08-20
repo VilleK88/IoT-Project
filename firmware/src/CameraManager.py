@@ -104,11 +104,11 @@ class CameraManager:
         print("recording state")
         self.start_recording_state()
 
+        recording_start_time = time.ticks_ms()
+        last_watchdog_feed = time.ticks_ms()
         last_live_frame_time = time.ticks_ms()
         last_motion_check = time.ticks_ms()
-        recording_start_time = time.ticks_ms()
         last_motion_time = time.ticks_ms()
-        last_watchdog_feed = time.ticks_ms()
 
         self._camera_pag.live_frames_pag = 0
         self._live_recording_start = time.ticks_ms()

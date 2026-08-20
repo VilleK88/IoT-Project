@@ -34,12 +34,16 @@ class LogManager:
         self._log_count += 1
 
     def write_log(self, lvl, msg):
-        entry = "{} [{}] {}\n".format(self._time_manager.timestamp(), lvl, msg)
-        self._ensure_log_space(len(entry))
-        with open(self._current_log, "a") as file:
-            file.write(entry)
-        if os.stat(self._current_log)[6] >= self._storage_config.max_log_file_size():
-            self._open_new_log()
+        try:
+            entry = "{} [{}] {}\n".format(self._time_manager.timestamp(), lvl, msg)
+            self._ensure_log_space(len(entry))
+            with open(self._current_log, "a") as file:
+                file.write(entry)
+            if os.stat(self._current_log)[6] >= self._storage_config.max_log_file_size():
+                self._open_new_log()
+        except Exception as err:
+            print("Log write error:", err)
+            raise
 
     def _ensure_log_space(self, incoming_bytes):
         quota = self._file_manager.log_quota_bytes()
