@@ -909,3 +909,16 @@ a 2-second post-FFC recovery proved insufficient, so the recovery period was inc
 - Verified recovery from a stalled PAG upload during stress testing.
 - Completed an almost three-hour stress test without an unintended reset.
 
+
+## 2026-08-21
+### Extended System Stability Test
+
+- Completed an extended stress test with the full embedded system running for approximately 10 hours and 9 minutes.
+- The system remained operational throughout the test while handling camera monitoring, recording, ring buffering, and file uploads.
+- Memory continued to recover and cycle normally during the test without showing a clear cumulative memory leak.
+- The test ended with a watchdog reset shortly after the mobile phone providing the Wi-Fi hotspot was moved to another room.
+- The timing of the reset indicates that loss or degradation of the network connection was the probable cause.
+- The hardware watchdog successfully reset the system after the failure, and the system automatically recovered and resumed normal operation after reboot.
+- The test provides further evidence that the previous upload stability improvements are working during long-term operation.
+- Network-loss handling remains an area for further testing.
+

@@ -138,12 +138,12 @@ class CameraLepton(Camera):
                     self._buffer_index,
                 )
             )
-            if self._buffer_index == 0:
+            """if self._buffer_index == 0:
                 self._ring_buf_fil_count += 1
                 print(f"After Lepton-3.5 ring buffer filled {self._ring_buf_fil_count}")
                 self._log_manager.info(
                     "Memory after ring buffer filled: {}".format(gc.mem_free())
-                )
+                )"""
             await asyncio.sleep_ms(self._buf_config.frame_interval_ms())
 
     # FFC (Flat-Field Correction) is an internal calibration process performed

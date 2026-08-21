@@ -30,8 +30,8 @@ async def main():
 
     await asyncio.gather(
         watchdog.watchdog_task(),
-        #camera_manager.update_frame_buffer_task(),
-        #camera_manager.monitor_motion(),
+        camera_manager.update_frame_buffer_task(),
+        camera_manager.monitor_motion(),
         network_manager.upload_task()
     )
 
