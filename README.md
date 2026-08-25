@@ -22,7 +22,7 @@ The embedded software is written entirely in **MicroPython** for the **OpenMV N6
 
 Outdoor test footage demonstrating the PAG7936 RGB camera and FLIR Lepton thermal camera in the OpenMV N6 wildlife camera system.
 
-▶️ [Watch the test video on YouTube](https://youtu.be/CoZ0mdOEK0Y)
+▶️ [Watch the test video on YouTube](https://www.youtube.com/watch?v=YeA9baXi2Uw)
 
 ---
 
