@@ -111,7 +111,7 @@ Outdoor test footage demonstrating the PAG7936 RGB camera and FLIR Lepton therma
 6. The video is uploaded asynchronously to Amazon S3.
 7. AWS Lambda extracts video frames.
 8. Amazon Rekognition identifies animals in the images.
-9. Detection results are stored in DynamoDB.
+9. Detected frames automatically organized into target-specific S3 folders.
 
 ---
 
