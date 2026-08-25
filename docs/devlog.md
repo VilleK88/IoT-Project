@@ -922,3 +922,25 @@ a 2-second post-FFC recovery proved insufficient, so the recovery period was inc
 - The test provides further evidence that the previous upload stability improvements are working during long-term operation.
 - Network-loss handling remains an area for further testing.
 
+
+## 2026-08-25
+## AWS Backend Refactor and Image Recognition
+
+- Refactored the AWS Lambda backend into clearer modules:
+  - `lambda_function.py` for Lambda event routing
+  - `upload_api.py` for presigned S3 upload URLs
+  - `s3_event_handler.py` for S3 ObjectCreated events
+  - `s3_storage.py` for S3 read/write operations
+  - `image_recognition.py` for MJPEG frame extraction and Amazon Rekognition
+  - `validation.py` for API request validation
+  - `config.py` for environment configuration
+- Restored `recognition_targets.json` for configurable image-recognition settings.
+- Added configurable target species, frame sampling interval, confidence threshold, and maximum label count.
+- Added Amazon Rekognition support through the Frankfurt `eu-central-1` region.
+- Added S3-triggered PAG image recognition.
+- Extracted JPEG frames from uploaded PAG MJPEG recordings.
+- Added target filtering against configured animal and human labels.
+- Added storage of detected target frames under `uploads/animals/<target>/`.
+- Added camera and event identifiers to the S3 object structure.
+- Added required Lambda IAM permissions for S3 object access and `rekognition:DetectLabels`.
+- Verified the complete PAG → S3 → Lambda → Rekognition → detected-frame storage pipeline.
