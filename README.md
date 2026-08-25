@@ -126,8 +126,6 @@ Outdoor test footage demonstrating the PAG7936 RGB camera and FLIR Lepton therma
 | Asynchronous cloud uploads | ✅ |
 | AWS processing pipeline | ✅ |
 | Amazon Rekognition integration | ✅ |
-| DynamoDB metadata storage | ✅ |
-| Remote configuration | 🚧 |
 
 ---
 
