@@ -68,7 +68,7 @@ Outdoor test footage demonstrating the PAG7936 RGB camera and FLIR Lepton therma
       Amazon Rekognition
                 │
                 ▼
-       Amazon DynamoDB
+       Target-Specific S3 Folders
 ```
 
 ---
