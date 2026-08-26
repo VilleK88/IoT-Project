@@ -35,7 +35,6 @@ Outdoor test footage demonstrating the PAG7936 RGB camera and FLIR Lepton therma
 - ⚡ Asynchronous runtime powered by MicroPython `asyncio`
 - ☁️ Background uploads to Amazon S3
 - 🤖 Automatic wildlife recognition using Amazon Rekognition
-- 📊 Detection metadata stored in Amazon DynamoDB
 - 🌐 Remote configuration support
 - 💾 Automatic local storage on microSD
 
@@ -68,7 +67,7 @@ Outdoor test footage demonstrating the PAG7936 RGB camera and FLIR Lepton therma
       Amazon Rekognition
                 │
                 ▼
-       Amazon DynamoDB
+       Target-Specific S3 Folders
 ```
 
 ---
@@ -97,7 +96,6 @@ Outdoor test footage demonstrating the PAG7936 RGB camera and FLIR Lepton therma
 - Amazon S3
 - AWS Lambda
 - Amazon Rekognition
-- Amazon DynamoDB
 
 ---
 
@@ -111,7 +109,7 @@ Outdoor test footage demonstrating the PAG7936 RGB camera and FLIR Lepton therma
 6. The video is uploaded asynchronously to Amazon S3.
 7. AWS Lambda extracts video frames.
 8. Amazon Rekognition identifies animals in the images.
-9. Detection results are stored in DynamoDB.
+9. Detected frames automatically organized into target-specific S3 folders.
 
 ---
 
