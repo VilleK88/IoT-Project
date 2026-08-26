@@ -272,10 +272,8 @@ class FileManager:
             number_part = name[len(lepton_prefix):-len(suffix)]
             pag_file =(
                 self._storage_config.vid_dir()
-                + "/"
-                + pag_prefix
-                + number_part
-                + suffix
+                + "/" + pag_prefix
+                + number_part + suffix
             )
             try:
                 os.stat(pag_file)
