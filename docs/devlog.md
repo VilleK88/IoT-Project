@@ -953,3 +953,10 @@ a 2-second post-FFC recovery proved insufficient, so the recovery period was inc
 - Added local file existence check using `os.stat()`.
 - If a matching PAG file exists, it is uploaded before the Lepton file.
 - This guarantees PAG-first upload order for each event and supports the AWS-side event validation logic.
+
+## 2026-08-26
+## Wi-Fi-Safe Time Synchronization
+
+- Added a Wi-Fi connection check before NTP time synchronization.
+- NTP synchronization is skipped during startup when Wi-Fi is unavailable.
+- Prevents startup failure caused by attempting network time synchronization without a connection.

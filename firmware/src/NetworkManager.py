@@ -30,7 +30,8 @@ class NetworkManager:
 
     def initialize(self):
         self.connect()
-        self._sync_time()
+        if self._wlan.isconnected():
+            self._sync_time()
 
     # Connects the device to the configured WiFi network.
     def connect(self):
@@ -48,7 +49,10 @@ class NetworkManager:
 
         # A valid IP address should now be assigned by DHCP.
         #print("WiFi connected:", self._wlan.ifconfig())
-        print("Wi-Fi connected")
+        if self._wlan.isconnected():
+            print("Wi-Fi connected")
+        else:
+            print("Wi-Fi not connected")
 
     async def reconnect(self):
         for delay in self._upload_config.backoff_s():
