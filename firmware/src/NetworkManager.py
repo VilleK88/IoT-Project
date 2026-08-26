@@ -90,13 +90,20 @@ class NetworkManager:
         # Allow both camera interfaces and the first prebuffer cycle to stabilize.
         await asyncio.sleep_ms(self._upload_config.startup_delay_ms())
         while True:
-            if self._wlan.isconnected():
-                self._log_manager.info("[DEBUG] Upload cycle started")
-                await self._upload_mjpeg_files()
-            else:
-                reconnected = await self.reconnect()
-                if not reconnected:
-                    await self.radio_power_cycle()
+            try:
+                if self._wlan.isconnected():
+                    self._log_manager.info("[DEBUG] Upload cycle started")
+                    await self._upload_mjpeg_files()
+                else:
+                    reconnected = await self.reconnect()
+                    if not reconnected:
+                        await self.radio_power_cycle()
+            except Exception as error:
+                # Network/AWS failures must never terminate the embedded system.
+                print("Upload task error:", error)
+                self._log_manager.error(
+                    "Upload task error: {}".format(error)
+                )
             await asyncio.sleep_ms(self._upload_config.upload_time_ms())
 
     async def _upload_mjpeg_files(self):
@@ -106,11 +113,19 @@ class NetworkManager:
                 if self._wlan.isconnected():
                     self._tools.print_memory_status("Memory before upload")
                     try:
+                        new_file = self._file_manager.check_if_lepton(file)
+                        if new_file:
+                            file = new_file
                         upload_succeeded = await self.upload_mjpeg(file)
                         if upload_succeeded:
                             self._file_manager.delete_file(file)
                             print(f"File deleted {file}")
                             self._log_manager.info(f"File deleted {file}")
+                    except Exception as error:
+                        print("Upload file error:", error)
+                        self._log_manager.error(
+                            "Upload file error: {}".format(error)
+                        )
                     finally:
                         self._log_manager.info("[DEBUG] Post-upload cleanup started")
                         self._tools.cleanup_memory()

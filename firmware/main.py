@@ -32,7 +32,7 @@ async def main():
         watchdog.watchdog_task(),
         camera_manager.update_frame_buffer_task(),
         camera_manager.monitor_motion(),
-        #network_manager.upload_task()
+        network_manager.upload_task()
     )
 
 asyncio.run(main())

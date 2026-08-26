@@ -944,3 +944,12 @@ a 2-second post-FFC recovery proved insufficient, so the recovery period was inc
 - Added camera and event identifiers to the S3 object structure.
 - Added required Lambda IAM permissions for S3 object access and `rekognition:DetectLabels`.
 - Verified the complete PAG → S3 → Lambda → Rekognition → detected-frame storage pipeline.
+
+## 2026-08-26
+## Enforced PAG-First Upload Order
+
+- Added Lepton file detection before uploading MJPEG files.
+- Added matching event-number lookup between Lepton and PAG recordings.
+- Added local file existence check using `os.stat()`.
+- If a matching PAG file exists, it is uploaded before the Lepton file.
+- This guarantees PAG-first upload order for each event and supports the AWS-side event validation logic.

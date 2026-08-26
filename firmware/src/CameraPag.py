@@ -109,10 +109,10 @@ class CameraPag(Camera):
             )
             if self._buffer_index == 0:
                 self._ring_buf_fil_count += 1
-                print(f"After PAG7936 ring buffer filled {self._ring_buf_fil_count}")
+                """print(f"After PAG7936 ring buffer filled {self._ring_buf_fil_count}")
                 self._log_manager.info(
                     "Memory after ring buffer filled: {}".format(gc.mem_free())
-                )
+                )"""
             # Yield control until the next prebuffer frame is due.
             await asyncio.sleep_ms(self._buf_config.frame_interval_ms())
 

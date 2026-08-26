@@ -262,3 +262,24 @@ class FileManager:
         else:
             return None
         return {"event_id": int(number_part), "sensor": sensor}
+
+    def check_if_lepton(self, file):
+        name = file.split("/")[-1]
+        pag_prefix = self._storage_config.video_prefix_pag()
+        lepton_prefix = self._storage_config.video_prefix_lepton()
+        suffix = self._storage_config.vid_suffix()
+        if name.startswith(lepton_prefix):
+            number_part = name[len(lepton_prefix):-len(suffix)]
+            pag_file =(
+                self._storage_config.vid_dir()
+                + "/"
+                + pag_prefix
+                + number_part
+                + suffix
+            )
+            try:
+                os.stat(pag_file)
+                return pag_file
+            except OSError:
+                return None
+        return None
