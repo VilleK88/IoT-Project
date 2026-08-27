@@ -960,3 +960,14 @@ a 2-second post-FFC recovery proved insufficient, so the recovery period was inc
 - Added a Wi-Fi connection check before NTP time synchronization.
 - NTP synchronization is skipped during startup when Wi-Fi is unavailable.
 - Prevents startup failure caused by attempting network time synchronization without a connection.
+
+## 2026-08-27
+## AWS Event Validation and Cleanup
+
+- Updated S3 event handling to process PAG and Lepton recordings separately.
+- PAG recordings are analyzed with Amazon Rekognition after upload.
+- Events containing configured targets are retained and detected frames are organized into target-specific directories.
+- Added automatic deletion of the complete event when no configured target is detected in the PAG recording.
+- Added Lepton validation against the matching PAG recording.
+- Lepton recordings are retained only when the corresponding PAG recording exists.
+- Added event-prefix cleanup to remove both PAG and Lepton recordings from rejected events.

@@ -1,18 +1,18 @@
 import urllib.parse
 
-from config import S3_BUCKET_NAME
-from s3_storage import (load_event_file, save_target_frame)
+from config import (S3_BUCKET_NAME, S3_UPLOADS_PREFIX)
+from s3_storage import (
+    load_event_file, save_target_frame, delete_event, object_exists
+    )
 from image_recognition import (detect_target_frames, extract_jpeg_frames)
 
 
 def process_s3_event(event):
     """
-    Process an uploaded Lepton MJPEG file.
+    Process uploaded PAG and Lepton MJPEG files.
 
     PAG and Lepton are stored together in the same event.
-    Image recognition is performed only on Lepton frames.
-    Only frames containing configured targets are copied
-    into the animals/ directory.
+    Image recognition is performed only on PAG frames.
     """
 
     # Get the S3 object key that triggered Lambda.
@@ -29,26 +29,29 @@ def process_s3_event(event):
         f"sensor {sensor}"
     )
 
-    # Image recognition must only be performed on Lepton.
+    # Image recognition must only be performed on PAG.
     if sensor == "pag":
         process_pag_event(camera_id, event_id, uploaded_key)
-    else:
-        print("Ignoring non-PAG S3 event.")
-
+    elif sensor == "lepton":
+        process_lepton_event(camera_id, event_id, uploaded_key)
 
 def process_pag_event(camera_id, event_id, pag_key):
     """
     Analyze the PAG MJPEG and save only frames
     containing configured targets.
+
+    Delete the complete event if no target is found.
     """
 
     # Download the PAG MJPEG recording.
     pag_data = load_event_file(S3_BUCKET_NAME, pag_key )
 
+    # Extract individual JPEG frames.
     frames = extract_jpeg_frames(pag_data)
 
     print(f"Extracted {len(frames)} PAG frames.")
 
+    # Analyze configured frames with Rekognition.
     target_frames = detect_target_frames(frames)
 
     if target_frames:
@@ -72,7 +75,23 @@ def process_pag_event(camera_id, event_id, pag_key):
                 print(f"Saved target frame: {object_key}")
     else:
         print("No targets detected.")
+        delete_event(S3_BUCKET_NAME, camera_id, event_id)
+        print("Rejected event deleted.")
 
+def process_lepton_event(camera_id, event_id, lepton_key):
+    """
+    Keep Lepton only if the matching PAG recording exists.
+    """
+
+    pag_key = (
+        S3_UPLOADS_PREFIX 
+        + "{}/event_{:05d}/pag.mjpeg").format(camera_id, int(event_id))
+
+    if object_exists(S3_BUCKET_NAME, pag_key):
+        print("Matching PAG found. Keeping Lepton.")
+    else:
+        print("Matching PAG not found. Deleting Lepton.")
+        delete_event(S3_BUCKET_NAME, camera_id, event_id)
 
 def parse_event_key(object_key):
     """

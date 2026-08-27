@@ -6,7 +6,7 @@ from validation import validate_upload_request
 def lambda_handler(event, context):
     """Route API Gateway and S3 events to the correct logic."""
 
-    # S3 ObjectCreated event.
+    # S3 ObjectCreated event after a successful upload.
     if is_s3_event(event):
          return process_s3_event(event)
 
@@ -16,7 +16,11 @@ def lambda_handler(event, context):
 def is_s3_event(event):
     """Check whether Lambda was invoked by an S3 event."""
     return (
-        "Records" in event and len(event["Records"]) > 0
+        # S3 events contain a "Records" list.
+        "Records" in event
+        # Make sure the list contains at least one event record.
+        and len(event["Records"]) > 0
+        # Check that the first record was created by Amazon S3.
         and event["Records"][0].get("eventSource") == "aws:s3"
     )
 

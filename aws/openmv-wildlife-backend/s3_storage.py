@@ -98,3 +98,25 @@ def save_target_frame(bucket, target, camera_id, event_id, frame_number, frame):
     )
 
     return object_key
+
+def delete_event(bucket, camera_id, event_id):
+    """Delete all objectst belonging to one rejected event"""
+
+    event_prefix = (
+        S3_UPLOADS_PREFIX + "{}/event_{:05d}/"
+        ).format(camera_id, int(event_id))
+
+    response = s3.list_objects_v2(Bucket=bucket, Prefix=event_prefix)
+
+    objects = response.get("Contents", [])
+
+    if objects:
+        s3.delete_objects(
+            Bucket=bucket,
+            Delete={
+                "Objects": [
+                    {"Key": obj["Key"]}
+                    for obj in objects
+                ]
+            }
+        )
