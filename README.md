@@ -10,9 +10,9 @@
 
 This project is a fully autonomous wildlife camera designed to monitor nature without human intervention.
 
-The system continuously monitors the environment using a FLIR Lepton thermal camera while maintaining a circular RGB frame buffer in memory. When thermal motion is detected, the buffered frames are preserved, the event is recorded as an MJPEG video, and the recording is uploaded to AWS for automatic wildlife recognition.
+The system continuously monitors the environment using a FLIR Lepton thermal camera while maintaining circular RGB and thermal frame buffers in memory. When thermal motion is detected, the buffered frames are preserved and both PAG7936 RGB and FLIR Lepton recordings are stored as MJPEG files. The recordings are then uploaded to AWS for automatic wildlife recognition.
 
-The embedded software is written entirely in **MicroPython** for the **OpenMV N6**. The runtime has recently been redesigned around **MicroPython's asyncio**, allowing cloud uploads to execute in the background while image processing continues uninterrupted.
+The embedded software is written entirely in **MicroPython** for the **OpenMV N6**. The runtime uses **MicroPython's asyncio**, allowing cloud uploads to execute in the background while camera monitoring continues.
 
 ---
 
@@ -30,13 +30,14 @@ Outdoor test footage demonstrating the PAG7936 RGB camera and FLIR Lepton therma
 
 - 🔥 Thermal motion detection using a FLIR Lepton camera
 - 📷 High-quality RGB recording using the PAG7936 camera
-- 🧠 5-second circular RGB frame buffer
-- 🎥 Automatic MJPEG event recording
+- 🧠 5-second circular RGB and thermal frame buffers
+- 🎥 Automatic PAG7936 and Lepton MJPEG event recording
 - ⚡ Asynchronous runtime powered by MicroPython `asyncio`
 - ☁️ Background uploads to Amazon S3
 - 🤖 Automatic wildlife recognition using Amazon Rekognition
-- 🌐 Remote configuration support
 - 💾 Automatic local storage on microSD
+- 🛡️ Hardware watchdog and automatic fault recovery
+- 🌡️ FLIR Lepton Flat-Field Correction (FFC) handling
 
 ---
 
@@ -93,23 +94,27 @@ Outdoor test footage demonstrating the PAG7936 RGB camera and FLIR Lepton therma
 
 ### AWS
 
-- Amazon S3
+- Amazon API Gateway
 - AWS Lambda
+- Amazon S3
 - Amazon Rekognition
 
 ---
 
 ## How It Works
 
-1. The FLIR Lepton continuously monitors the environment.
-2. Thermal motion is detected.
-3. A 5-second RGB frame buffer preserves footage from before the trigger.
-4. The RGB camera records the event.
-5. The recording is stored on the microSD card.
-6. The video is uploaded asynchronously to Amazon S3.
-7. AWS Lambda extracts video frames.
-8. Amazon Rekognition identifies animals in the images.
-9. Detected frames automatically organized into target-specific S3 folders.
+1. The FLIR Lepton continuously monitors the environment for thermal motion.
+2. Both cameras continuously maintain 5-second circular pre-event buffers.
+3. Thermal motion triggers an event.
+4. Buffered PAG7936 and Lepton frames are preserved.
+5. Both cameras continue recording the event as MJPEG files.
+6. The recordings are stored locally on the microSD card.
+7. The files are uploaded asynchronously to Amazon S3 using presigned upload URLs.
+8. S3 ObjectCreated events invoke AWS Lambda.
+9. Lambda extracts selected frames from the PAG7936 MJPEG recording.
+10. Amazon Rekognition analyzes the frames for configured targets.
+11. Detected target frames are stored in target-specific S3 folders.
+12. Events without configured targets can be rejected and removed.
 
 ---
 
@@ -117,13 +122,15 @@ Outdoor test footage demonstrating the PAG7936 RGB camera and FLIR Lepton therma
 
 | Feature | Status |
 |----------|--------|
-| Dual-camera switching | ✅ |
-| Thermal motion detection | ✅ |
-| RGB circular frame buffer | ✅ |
-| MJPEG recording | ✅ |
-| Asynchronous cloud uploads | ✅ |
-| AWS processing pipeline | ✅ |
-| Amazon Rekognition integration | ✅ |
+| Dual-camera operation | ✅ Complete |
+| Thermal motion detection | ✅ Complete |
+| RGB and thermal circular prebuffers | ✅ Complete |
+| PAG7936 and Lepton MJPEG recording | ✅ Complete |
+| FFC handling | ✅ Complete |
+| Hardware watchdog recovery | ✅ Complete |
+| Asynchronous cloud uploads | ✅ Complete |
+| AWS processing pipeline | ✅ Complete |
+| Amazon Rekognition integration | ✅ Complete |
 
 ---
 
@@ -142,16 +149,6 @@ Outdoor test footage demonstrating the PAG7936 RGB camera and FLIR Lepton therma
 
 ---
 
-## Future Improvements
-
-- Improve wildlife detection accuracy
-- Reduce power consumption
-- Expand remote configuration options
-- Add additional cloud analytics
-- Improve enclosure for long-term outdoor deployment
-
----
-
 ## Acknowledgements
 
-This project is being developed as part of my Embedded Software Engineering studies at Metropolia University of Applied Sciences while exploring embedded AI, computer vision, and cloud-connected IoT systems.
+This project was developed as part of my Embedded Software Engineering studies at Metropolia University of Applied Sciences while exploring embedded systems, computer vision, thermal imaging, asynchronous programming, and cloud-connected IoT systems.
