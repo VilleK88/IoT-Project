@@ -1,4 +1,4 @@
-# IoT Wildlife Camera
+# Smart Wildlife Monitoring System
 
 > A smart dual-camera wildlife monitoring system built with the OpenMV N6 that automatically detects, records, uploads, and identifies wildlife using thermal imaging, computer vision, and AWS cloud services.
 
