@@ -31,6 +31,12 @@ def handle_upload_request(event):
         camera_id = body.get("camera_id")
         event_id = body.get("event_id")
         sensor = body.get("sensor")
+
+                print(
+        f"Upload URL requested for event {event_id}, "
+        f"camera {camera_id}, "
+        f"sensor {sensor}"
+    )
     
         # Validate the upload request before generating an upload URL.
         validation_error =  validate_upload_request(camera_id, event_id, sensor)
