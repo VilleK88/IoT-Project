@@ -971,3 +971,11 @@ a 2-second post-FFC recovery proved insufficient, so the recovery period was inc
 - Added Lepton validation against the matching PAG recording.
 - Lepton recordings are retained only when the corresponding PAG recording exists.
 - Added event-prefix cleanup to remove both PAG and Lepton recordings from rejected events.
+
+## 2026-08-31
+## Documentation References Update
+
+- Added references for circular buffering, garbage collection, hardware watchdog, and asyncio.
+- Added the OpenMV MJPEG source reference for the custom timing correction.
+- Updated the related citations in the project report.
+
