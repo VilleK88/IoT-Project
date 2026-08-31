@@ -989,3 +989,13 @@ a 2-second post-FFC recovery proved insufficient, so the recovery period was inc
 - No measurable PAG upload performance penalty was observed from enabling motion monitoring.
 - Removed memory-debug operations from the upload loop after testing showed unnecessary overhead.
 
+
+## 2026-08-31
+## Runtime Architecture Documentation Update
+
+- Updated the system architecture diagram to accurately represent the runtime execution model.
+- Documented the four concurrent asynchronous tasks: watchdog servicing, camera frame-buffer updates, thermal motion monitoring, and network uploads.
+- Clarified that event recording uses a synchronous state machine for time-critical camera recording.
+- Updated the project report and presentation with the corrected architecture diagram.
+- Renamed `monitor_motion()` to `monitor_motion_task()` for consistency with the other long-running asynchronous tasks.
+

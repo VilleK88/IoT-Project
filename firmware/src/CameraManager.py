@@ -51,7 +51,7 @@ class CameraManager:
         )
 
     # Returns True when it is time to perform the next motion check.
-    async def monitor_motion(self):
+    async def monitor_motion_task(self):
         while True:
             # Do not perform frame differencing during or immediately after FFC.
             if not self._camera_lepton.handle_ffc():
