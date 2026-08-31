@@ -187,7 +187,6 @@ class NetworkManager:
             upload_start_time = time.ticks_ms()
 
             bytes_sent = 0
-            next_progress_print = self._upload_config.progress_interval_bytes()
             self._log_manager.info("[DEBUG] File streaming started")
             # Stream the file directly from storage to S3 in blocks
             # instead of loading the complete MJPEG file into RAM.
@@ -208,12 +207,7 @@ class NetworkManager:
                             print("Upload stream timeout")
                             return False
                         bytes_sent += len(chunk)
-
-                        if bytes_sent >= next_progress_print:
-                            self._tools.print_memory_status(
-                                "UPLOAD progress {} KiB".format(bytes_sent // 1024)
-                            )
-                            next_progress_print += self._upload_config.progress_interval_bytes()
+                        
                 except Exception as err:
                     print("File streaming error", err)
                     raise

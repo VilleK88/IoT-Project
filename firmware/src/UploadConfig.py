@@ -13,7 +13,6 @@ class UploadConfig:
 
         self._https_port = 443
         self._upload_chunk_size = 4096
-        self._progress_interval_bytes = 1024 * 1024
 
         self._connect_poll_ms = 1000
 
@@ -45,9 +44,6 @@ class UploadConfig:
 
     def upload_chunk_size(self):
         return self._upload_chunk_size
-
-    def progress_interval_bytes(self):
-        return self._progress_interval_bytes
 
     def connect_poll_ms(self):
         return self._connect_poll_ms

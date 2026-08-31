@@ -979,3 +979,13 @@ a 2-second post-FFC recovery proved insufficient, so the recovery period was inc
 - Added the OpenMV MJPEG source reference for the custom timing correction.
 - Updated the related citations in the project report.
 
+
+## 2026-08-31
+## Concurrent Upload Performance Testing
+
+- Tested network upload performance while watchdog, camera frame-buffer updates, and motion monitoring were running concurrently.
+- PAG upload with motion monitoring enabled: 511.377 s at 154 KiB/s.
+- PAG upload with motion monitoring disabled: 529.367 s at 148 KiB/s.
+- No measurable PAG upload performance penalty was observed from enabling motion monitoring.
+- Removed memory-debug operations from the upload loop after testing showed unnecessary overhead.
+
