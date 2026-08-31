@@ -193,8 +193,7 @@ class NetworkManager:
             with open(filename, "rb") as file:
                 try:
                     while True:
-                        chunk = file.read(
-                            self._upload_config.upload_chunk_size())  # Tested options: 4096, 8192, 16384, 32768
+                        chunk = file.read(self._upload_config.upload_chunk_size())  # Tested options: 4096, 8192, 16384, 32768
                         # An empty read indicates that the end of the file
                         # has been reached.
                         if not chunk:
@@ -207,7 +206,7 @@ class NetworkManager:
                             print("Upload stream timeout")
                             return False
                         bytes_sent += len(chunk)
-                        
+
                 except Exception as err:
                     print("File streaming error", err)
                     raise

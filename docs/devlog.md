@@ -999,3 +999,17 @@ a 2-second post-FFC recovery proved insufficient, so the recovery period was inc
 - Updated the project report and presentation with the corrected architecture diagram.
 - Renamed `monitor_motion()` to `monitor_motion_task()` for consistency with the other long-running asynchronous tasks.
 
+
+## 2026-08-31
+## Wi-Fi Upload Performance Investigation
+
+- Investigated the relatively low PAG7936 upload throughput of the embedded system.
+- Tested uploads with Wi-Fi power saving disabled using `network.WLAN.PM_NONE`.
+- A 60-second PAG7936 recording uploaded in 546.628 s at 144 KiB/s with Wi-Fi power saving disabled.
+- The previous test with the normal Wi-Fi configuration completed in 511.377 s at 154 KiB/s.
+- Disabling Wi-Fi power saving therefore did not improve upload performance in the tested configuration.
+- Compared the implementation with an OpenMV developer's N6 upload benchmark.
+- The OpenMV benchmark demonstrated approximately 600 KB/s using a dedicated synchronous upload implementation with large buffered SD-card reads.
+- The benchmark uses a 256 KiB buffer and a simpler plain HTTP/TCP transfer instead of the project's asynchronous HTTPS upload to Amazon S3.
+- A dedicated high-throughput upload mode could be investigated in future development, for example during a configurable low-activity maintenance period.
+
