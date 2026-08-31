@@ -249,7 +249,6 @@ class NetworkManager:
                     self._log_manager.info("[DEBUG] S3 TLS connection closed")
                 except Exception as error:
                     print("Writer close error:", error)
-                    raise
 
     # Sends a JSON POST request over HTTPS and returns the JSON response.
     async def _post_json(self, url, data):
