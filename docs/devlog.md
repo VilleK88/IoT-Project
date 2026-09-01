@@ -1036,3 +1036,17 @@ a 2-second post-FFC recovery proved insufficient, so the recovery period was inc
 - Memory returned consistently to approximately 10.18 MiB free after upload cleanup, with no visible progressive heap loss.
 - The larger upload block is currently showing substantially better throughput than the previous 4 KiB configuration.
 - Extended stability testing is still required before making the 256 KiB upload block the final configuration.
+
+## 2026-09-01
+### Extended 256 KiB Upload Stability Testing
+
+- Continued stress testing S3 uploads using the 256 KiB reusable upload buffer under the normal runtime workload.
+- Successfully completed multiple large PAG7936 uploads at approximately 185–211 KiB/s.
+- Verified stable memory recovery across consecutive upload cycles with no visible progressive heap loss.
+- Triggered synchronous motion recording while a PAG7936 file was actively streaming to S3.
+- The interrupted upload reached the configured stream timeout after recording completed, but the TLS connection was closed cleanly and the system continued without a hardware reset.
+- The next S3 upload cycle started approximately three seconds after cleanup and completed successfully.
+- Verified continued motion detection, PAG7936 and Lepton recording, MJPEG finalization, and S3 uploading after the interrupted transfer.
+- Multiple additional recording and upload cycles completed successfully during the test.
+- Confirmed that handled upload failures do not prevent continued camera or network operation.
+- The 256 KiB configuration continues to provide substantially higher upload throughput than the previous 4 KiB configuration while maintaining stable operation.
