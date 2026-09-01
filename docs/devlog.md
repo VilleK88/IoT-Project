@@ -1020,3 +1020,10 @@ a 2-second post-FFC recovery proved insufficient, so the recovery period was inc
 - Added a `memoryview` for sending only the valid portion of the reusable buffer without copying the data.
 - Kept the existing 4 KiB upload block size and asynchronous HTTPS upload architecture.
 - Change is intended to reduce repeated memory allocations during long PAG MJPEG uploads and will be evaluated in extended stability testing.
+
+## 2026-09-01
+- Resolved recurring hardware resets occurring after network uploads.
+- Removed `await writer.wait_closed()` from TLS connection cleanup after testing showed that waiting for the stream to close could cause instability on the OpenMV N6.
+- TLS connections are now closed using `writer.close()` without waiting for asynchronous shutdown completion.
+- Reformatted the microSD card to eliminate possible filesystem-related instability.
+- Verified that the system operates normally after the network cleanup and storage fixes.

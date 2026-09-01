@@ -243,7 +243,6 @@ class NetworkManager:
             # A successful S3 PUT upload returns HTTP status 200.
             # Read and print the remaining response only when the upload fails.
             if b" 200 " not in status_line:
-                #response_body = tls_sock.read()
                 response_body = await reader.read()
                 print("S3 error response:", response_body)
                 self._log_manager.info("[DEBUG] MJPEG upload failed")
@@ -265,11 +264,12 @@ class NetworkManager:
             if writer is not None:
                 try:
                     writer.close()
-                    await writer.wait_closed()
+                    #await writer.wait_closed()
                     self._log_manager.info("[DEBUG] S3 TLS connection closed")
                 except Exception as error:
                     self._log_manager.info("[DEBUG] Writer close error")
                     print("Writer close error:", error)
+                    raise
 
     # Sends a JSON POST request over HTTPS and returns the JSON response.
     async def _post_json(self, url, data):
