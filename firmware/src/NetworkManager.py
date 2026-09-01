@@ -96,7 +96,6 @@ class NetworkManager:
         while True:
             try:
                 if self._wlan.isconnected():
-                    self._log_manager.info("[DEBUG] Upload cycle started")
                     await self._upload_mjpeg_files()
                 else:
                     reconnected = await self.reconnect()
@@ -115,6 +114,7 @@ class NetworkManager:
         if files:
             for file in files:
                 if self._wlan.isconnected():
+                    self._log_manager.info("[DEBUG] Upload cycle started")
                     self._tools.print_memory_status("Memory before upload")
                     try:
                         new_file = self._file_manager.check_if_lepton(file)
@@ -123,10 +123,10 @@ class NetworkManager:
                         upload_succeeded = await self.upload_mjpeg(file)
                         if upload_succeeded:
                             self._file_manager.delete_file(file)
-                            print(f"File deleted {file}")
+                            #print(f"File deleted {file}")
                             self._log_manager.info(f"File deleted {file}")
                     except Exception as error:
-                        print("Upload file error:", error)
+                        #print("Upload file error:", error)
                         self._log_manager.error(
                             "Upload file error: {}".format(error)
                         )
@@ -185,30 +185,47 @@ class NetworkManager:
             writer.write(request_header.encode())
             await writer.drain()
             upload_start_time = time.ticks_ms()
+            last_upload_progress = time.ticks_ms()
 
             bytes_sent = 0
+
+            # Allocate the upload block once and reuse it for the complete file.
+            # This avoids allocating a new bytes object for every file read.
+            chunk = bytearray(self._upload_config.upload_chunk_size())
+            mv = memoryview(chunk)
+
             self._log_manager.info("[DEBUG] File streaming started")
             # Stream the file directly from storage to S3 in blocks
             # instead of loading the complete MJPEG file into RAM.
             with open(filename, "rb") as file:
                 try:
                     while True:
-                        chunk = file.read(self._upload_config.upload_chunk_size())  # Tested options: 4096, 8192, 16384, 32768
+                        now = time.ticks_ms()
+                        if time.ticks_diff(now, last_upload_progress) > 10000:
+                            self._log_manager.warning("Upload interrupted too long, retrying later")
+                            return False
+
+                        # Read the next block directly into the existing chunk buffer.
+                        bytes_read = file.readinto(chunk)
                         # An empty read indicates that the end of the file
                         # has been reached.
-                        if not chunk:
+                        if not bytes_read:
                             break
                         # Ensure the complete block is written before reading
-                        writer.write(chunk)
+                        writer.write(mv[:bytes_read])
                         try:
                             await asyncio.wait_for(writer.drain(), 10)
                         except asyncio.TimeoutError:
+                            self._log_manager.warning("Upload stream timeout")
                             print("Upload stream timeout")
                             return False
+
                         bytes_sent += len(chunk)
+                        last_upload_progress = time.ticks_ms()
 
                 except Exception as err:
                     print("File streaming error", err)
+                    self._log_manager.error("File streaming error: {}".format(err))
                     raise
 
             self._log_manager.info("[DEBUG] File streaming completed")
@@ -220,6 +237,7 @@ class NetworkManager:
             # A missing response usually means that the connection was
             # closed before S3 returned an HTTP status.
             if not status_line:
+                self._log_manager.info("[DEBUG] No response received from S3")
                 raise OSError("No response received from S3")
             print("S3 response:", status_line)
             # A successful S3 PUT upload returns HTTP status 200.
@@ -228,6 +246,7 @@ class NetworkManager:
                 #response_body = tls_sock.read()
                 response_body = await reader.read()
                 print("S3 error response:", response_body)
+                self._log_manager.info("[DEBUG] MJPEG upload failed")
                 raise OSError("MJPEG upload failed")
 
             self._log_manager.info(f"{filename} uploaded successfully")
@@ -239,6 +258,7 @@ class NetworkManager:
 
         except Exception as error:
             print("MJPEG upload error:", error)
+            self._log_manager.info("[DEBUG] MJPEG upload error")
             return False
 
         finally:
@@ -248,6 +268,7 @@ class NetworkManager:
                     await writer.wait_closed()
                     self._log_manager.info("[DEBUG] S3 TLS connection closed")
                 except Exception as error:
+                    self._log_manager.info("[DEBUG] Writer close error")
                     print("Writer close error:", error)
 
     # Sends a JSON POST request over HTTPS and returns the JSON response.
@@ -286,9 +307,11 @@ class NetworkManager:
             status_line = await reader.readline()
 
             if not status_line:
+                self._log_manager.info("[DEBUG] No response received")
                 raise OSError("No response received")
 
             if b" 200 " not in status_line:
+                self._log_manager.info("[DEBUG] HTTP POST failed")
                 raise OSError(
                     "HTTP POST failed: {}".format(status_line)
                 )
@@ -305,6 +328,7 @@ class NetworkManager:
             return json.loads(response_body)
 
         except Exception as error:
+            self._log_manager.info("[DEBUG] POST error")
             print("POST error:", error)
             raise
 

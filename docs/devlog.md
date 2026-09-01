@@ -1013,3 +1013,10 @@ a 2-second post-FFC recovery proved insufficient, so the recovery period was inc
 - The benchmark uses a 256 KiB buffer and a simpler plain HTTP/TCP transfer instead of the project's asynchronous HTTPS upload to Amazon S3.
 - A dedicated high-throughput upload mode could be investigated in future development, for example during a configurable low-activity maintenance period.
 
+
+## 2026-09-01
+- Optimized S3 file streaming memory usage.
+- Replaced repeated `file.read()` allocations with a reusable `bytearray` buffer and `file.readinto()`.
+- Added a `memoryview` for sending only the valid portion of the reusable buffer without copying the data.
+- Kept the existing 4 KiB upload block size and asynchronous HTTPS upload architecture.
+- Change is intended to reduce repeated memory allocations during long PAG MJPEG uploads and will be evaluated in extended stability testing.
