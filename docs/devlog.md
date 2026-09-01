@@ -1027,3 +1027,12 @@ a 2-second post-FFC recovery proved insufficient, so the recovery period was inc
 - TLS connections are now closed using `writer.close()` without waiting for asynchronous shutdown completion.
 - Reformatted the microSD card to eliminate possible filesystem-related instability.
 - Verified that the system operates normally after the network cleanup and storage fixes.
+
+## 2026-09-01
+- Retested S3 uploads using a 256 KiB upload block after resolving the earlier TLS cleanup and microSD card issues.
+- Enabled `monitor_motion_task()` during the test to evaluate upload performance under the normal asynchronous monitoring workload.
+- A 76.9 MiB PAG7936 MJPEG file uploaded successfully in approximately 436.7 seconds at an average speed of 180 KiB/s.
+- Earlier tests without motion monitoring produced approximately 183–195 KiB/s across several PAG7936 files using the same 256 KiB upload block.
+- Memory returned consistently to approximately 10.18 MiB free after upload cleanup, with no visible progressive heap loss.
+- The larger upload block is currently showing substantially better throughput than the previous 4 KiB configuration.
+- Extended stability testing is still required before making the 256 KiB upload block the final configuration.

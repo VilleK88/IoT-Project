@@ -95,6 +95,8 @@ class NetworkManager:
         await asyncio.sleep_ms(self._upload_config.startup_delay_ms())
         while True:
             try:
+                # Disable Wi-Fi power saving.
+                self._wlan.config(pm=network.WLAN.PM_NONE)
                 if self._wlan.isconnected():
                     await self._upload_mjpeg_files()
                 else:
@@ -107,6 +109,9 @@ class NetworkManager:
                 self._log_manager.error(
                     "Upload task error: {}".format(error)
                 )
+            finally:
+                # Restore Wi-Fi power saving after the upload.
+                self._wlan.config(pm=network.WLAN.PM_POWERSAVE)
             await asyncio.sleep_ms(self._upload_config.upload_time_ms())
 
     async def _upload_mjpeg_files(self):
@@ -133,7 +138,7 @@ class NetworkManager:
                     finally:
                         self._log_manager.info("[DEBUG] Post-upload cleanup started")
                         self._tools.cleanup_memory()
-                        self._tools.print_memory_status("Memory after successful upload cleanup")
+                        self._tools.print_memory_status("Memory after upload cleanup")
                         # Give the network stack time to release TLS resources.
                         await asyncio.sleep_ms(self._upload_config.post_upload_delay_ms())
                 else:
@@ -220,7 +225,7 @@ class NetworkManager:
                             print("Upload stream timeout")
                             return False
 
-                        bytes_sent += len(chunk)
+                        bytes_sent += bytes_read
                         last_upload_progress = time.ticks_ms()
 
                 except Exception as err:
