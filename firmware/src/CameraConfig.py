@@ -10,7 +10,7 @@ class CameraConfig:
         self._width_lepton = 160
         self._height_lepton = 120
 
-        self._max_recording_time_ms = 1 * 30 * 1000  # Maximum recording duration 1 minutes.
+        self._max_recording_time_ms = 1 * 60 * 1000  # Maximum recording duration 1 minutes.
 
         self._pag_stabilization_ms = 2000
         self._lepton_stabilization_ms = 5000
