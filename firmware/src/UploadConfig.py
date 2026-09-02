@@ -12,7 +12,7 @@ class UploadConfig:
         self._post_upload_delay_ms = 2_000
 
         self._https_port = 443
-        self._upload_chunk_size = 262144 # 4096
+        self._upload_chunk_size = 262144 # 4096, 262144
 
         self._connect_poll_ms = 1000
 

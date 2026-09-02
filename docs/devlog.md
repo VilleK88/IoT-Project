@@ -1023,8 +1023,6 @@ a 2-second post-FFC recovery proved insufficient, so the recovery period was inc
 
 ## 2026-09-01
 - Resolved recurring hardware resets occurring after network uploads.
-- Removed `await writer.wait_closed()` from TLS connection cleanup after testing showed that waiting for the stream to close could cause instability on the OpenMV N6.
-- TLS connections are now closed using `writer.close()` without waiting for asynchronous shutdown completion.
 - Reformatted the microSD card to eliminate possible filesystem-related instability.
 - Verified that the system operates normally after the network cleanup and storage fixes.
 
@@ -1050,3 +1048,13 @@ a 2-second post-FFC recovery proved insufficient, so the recovery period was inc
 - Multiple additional recording and upload cycles completed successfully during the test.
 - Confirmed that handled upload failures do not prevent continued camera or network operation.
 - The 256 KiB configuration continues to provide substantially higher upload throughput than the previous 4 KiB configuration while maintaining stable operation.
+
+## 2026-09-02
+- Completed an approximately 7-hour overnight full-system stress test without an additional hardware reset during the observed test period.
+- Verified recovery from upload interruptions caused by synchronous event recording. Failed uploads remained on the microSD card and were successfully retried later.
+- Added try-except handling around critical microSD card write operations to improve storage error diagnostics.
+- Continued long-duration stress testing at school under stable network conditions. The system has now operated for almost 6 hours without an OpenMV N6 crash.
+- Validated the existing 256 KiB upload configuration under stable Wi-Fi conditions, achieving approximately 190-200 KiB/s PAG7936 upload speeds.
+- Successfully uploaded PAG7936 recordings exceeding 100 MB.
+- Verified recovery from Upload stream timeout and ECONNRESET without requiring a reboot.
+- Memory remained stable during repeated uploads with no progressive memory loss observed.

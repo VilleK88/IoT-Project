@@ -128,13 +128,9 @@ class NetworkManager:
                         upload_succeeded = await self.upload_mjpeg(file)
                         if upload_succeeded:
                             self._file_manager.delete_file(file)
-                            #print(f"File deleted {file}")
                             self._log_manager.info(f"File deleted {file}")
                     except Exception as error:
-                        #print("Upload file error:", error)
-                        self._log_manager.error(
-                            "Upload file error: {}".format(error)
-                        )
+                        self._log_manager.error("Upload file error: {}".format(error))
                     finally:
                         self._log_manager.info("[DEBUG] Post-upload cleanup started")
                         self._tools.cleanup_memory()
@@ -187,8 +183,12 @@ class NetworkManager:
             ).format(path, host, file_size)
             # Send the complete request header before transmitting
             # the MJPEG file contents
+
+            # Send the complete request header before transmitting
+            # the MJPEG file contents
             writer.write(request_header.encode())
             await writer.drain()
+
             upload_start_time = time.ticks_ms()
             last_upload_progress = time.ticks_ms()
 
@@ -211,13 +211,22 @@ class NetworkManager:
                             return False
 
                         # Read the next block directly into the existing chunk buffer.
-                        bytes_read = file.readinto(chunk)
+                        try:
+                            bytes_read = file.readinto(chunk)
+                        except Exception as err:
+                            self._log_manager.error("SD card read failed: {}".format(err))
+                            return False
                         # An empty read indicates that the end of the file
                         # has been reached.
                         if not bytes_read:
                             break
                         # Ensure the complete block is written before reading
-                        writer.write(mv[:bytes_read])
+                        try:
+                            writer.write(mv[:bytes_read])
+                        except Exception as err:
+                            self._log_manager.error("Upload socket write failed: {}".format(err))
+                            return False
+
                         try:
                             await asyncio.wait_for(writer.drain(), 10)
                         except asyncio.TimeoutError:
@@ -231,7 +240,7 @@ class NetworkManager:
                 except Exception as err:
                     print("File streaming error", err)
                     self._log_manager.error("File streaming error: {}".format(err))
-                    raise
+                    return False
 
             self._log_manager.info("[DEBUG] File streaming completed")
 
@@ -269,12 +278,11 @@ class NetworkManager:
             if writer is not None:
                 try:
                     writer.close()
-                    #await writer.wait_closed()
+                    await writer.wait_closed()
                     self._log_manager.info("[DEBUG] S3 TLS connection closed")
                 except Exception as error:
                     self._log_manager.info("[DEBUG] Writer close error")
                     print("Writer close error:", error)
-                    raise
 
     # Sends a JSON POST request over HTTPS and returns the JSON response.
     async def _post_json(self, url, data):

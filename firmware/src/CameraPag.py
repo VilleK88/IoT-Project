@@ -47,9 +47,16 @@ class CameraPag(Camera):
 
         self._tools.print_memory_status("After PAG7936 init")
 
+    def write_to_pag(self, frame):
+        try:
+            self.video_pag.write(frame)
+        except Exception as error:
+            self._log_manager.error("SD card write failed: {}".format(error))
+            raise
+
     def record_frame(self):
         self._current_frame = self.csi0.snapshot()
-        self.video_pag.write(self._current_frame)
+        self.write_to_pag(self._current_frame)
         self.saved_frames += 1
 
     # Writes the buffered frames to the MJPEG file.
@@ -72,7 +79,7 @@ class CameraPag(Camera):
         # Write the buffered frames to the MJPEG file.
         for frame in prebuf_frames_pag:
             scaled_frame = self.scale_frame(frame)
-            self.video_pag.write(scaled_frame)
+            self.write_to_pag(scaled_frame)
             self.saved_frames += 1
 
             # Periodically capture a new RGB frame while writing to
@@ -87,7 +94,7 @@ class CameraPag(Camera):
         # transition from buffered video to live recording is as seamless as possible.
         for frame in catchup_frames_pag:
             scaled_frame = self.scale_frame(frame)
-            self.video_pag.write(scaled_frame)
+            self.write_to_pag(scaled_frame)
             self.saved_frames += 1
 
     def scale_frame(self, frame):
@@ -109,10 +116,6 @@ class CameraPag(Camera):
             )
             if self._buffer_index == 0:
                 self._ring_buf_fil_count += 1
-                """print(f"After PAG7936 ring buffer filled {self._ring_buf_fil_count}")
-                self._log_manager.info(
-                    "Memory after ring buffer filled: {}".format(gc.mem_free())
-                )"""
             # Yield control until the next prebuffer frame is due.
             await asyncio.sleep_ms(self._buf_config.frame_interval_ms())
 

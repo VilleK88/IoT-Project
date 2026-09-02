@@ -58,9 +58,16 @@ class CameraLepton(Camera):
 
         self._tools.print_memory_status("After Lepton init")
 
+    def write_to_lepton(self, frame):
+        try:
+            self.video_lepton.write(frame)
+        except Exception as error:
+            self._log_manager.error("SD card write failed: {}".format(error))
+            raise
+
     def record_frame(self):
         self._current_frame = self.csi1.snapshot()
-        self.video_lepton.write(self._current_frame)
+        self.write_to_lepton(self._current_frame)
         self.saved_frames += 1
 
     # Thermal frame differencing.
@@ -114,7 +121,7 @@ class CameraLepton(Camera):
 
         # Write the buffered frames to the MJPEG file.
         for frame in prebuf_frames_lepton:
-            self.video_lepton.write(frame)
+            self.write_to_lepton(frame)
             self.saved_frames += 1
             now = time.ticks_ms()
             if time.ticks_diff(now, last_live_frame_time_lepton) >= self._frame_interval_ms:
@@ -125,7 +132,7 @@ class CameraLepton(Camera):
         # Append the frames captured during the pre-buffer write so the
         # transition from buffered video to live recording is as seamless as possible.
         for frame in catchup_frames_lepton:
-            self.video_lepton.write(frame)
+            self.write_to_lepton(frame)
             self.saved_frames += 1
 
     async def update_frame_buffer_lepton(self):
@@ -138,12 +145,6 @@ class CameraLepton(Camera):
                     self._buffer_index,
                 )
             )
-            """if self._buffer_index == 0:
-                self._ring_buf_fil_count += 1
-                print(f"After Lepton-3.5 ring buffer filled {self._ring_buf_fil_count}")
-                self._log_manager.info(
-                    "Memory after ring buffer filled: {}".format(gc.mem_free())
-                )"""
             await asyncio.sleep_ms(self._buf_config.frame_interval_ms())
 
     # FFC (Flat-Field Correction) is an internal calibration process performed
