@@ -12,7 +12,7 @@ class StorageConfig:
         self._video_quota_percent = 85
         self._log_quota_percent = 10
 
-        # Remaining 5% is intentionally left unsued as safety margin.
+        # Remaining 5% is intentionally left unused as safety margin.
 
         # Maximum size of one individual log file before rotating.
         self._max_log_file_size = 256 * 1024  # 256 KiB

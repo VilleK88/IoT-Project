@@ -8,11 +8,11 @@ from src.Watchdog import Watchdog
 import asyncio
 import gc
 
-gc.threshold(5_000_000)  # 10_000_000 works without upload_task
-print(gc.threshold())
-
 
 async def main():
+    # Garbage-collection threshold for the full system.
+    gc.threshold(5_000_000)
+
     file_manager = FileManager()
     log_manager = LogManager(file_manager)
     network_manager = NetworkManager(file_manager, log_manager)

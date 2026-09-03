@@ -1058,3 +1058,9 @@ a 2-second post-FFC recovery proved insufficient, so the recovery period was inc
 - Successfully uploaded PAG7936 recordings exceeding 100 MB.
 - Verified recovery from Upload stream timeout and ECONNRESET without requiring a reboot.
 - Memory remained stable during repeated uploads with no progressive memory loss observed.
+
+## 2026-09-03
+- Reviewed source-code comments across the embedded application and updated outdated or misleading descriptions.
+- Updated comments to match the current recording, motion-detection, buffering, upload, and configuration behavior.
+- Removed obsolete experimental comments and duplicate comments.
+- Moved the garbage-collection threshold configuration into the main application initialization for clearer organization.

@@ -106,9 +106,7 @@ class NetworkManager:
             except Exception as error:
                 # Network/AWS failures must never terminate the embedded system.
                 print("Upload task error:", error)
-                self._log_manager.error(
-                    "Upload task error: {}".format(error)
-                )
+                self._log_manager.error("Upload task error: {}".format(error))
             finally:
                 # Restore Wi-Fi power saving after the upload.
                 self._wlan.config(pm=network.WLAN.PM_POWERSAVE)
@@ -181,8 +179,6 @@ class NetworkManager:
                 "Connection: close\r\n"
                 "\r\n"
             ).format(path, host, file_size)
-            # Send the complete request header before transmitting
-            # the MJPEG file contents
 
             # Send the complete request header before transmitting
             # the MJPEG file contents

@@ -50,7 +50,7 @@ class CameraManager:
             self._camera_lepton.update_frame_buffer_lepton()
         )
 
-    # Returns True when it is time to perform the next motion check.
+    # Continuously monitors thermal motion and starts event recording when motion is detected.
     async def monitor_motion_task(self):
         while True:
             # Do not perform frame differencing during or immediately after FFC.
@@ -180,9 +180,7 @@ class CameraManager:
         self._camera_lepton.finalize_video(self._file_manager)
 
         self._tools.print_memory_status("record_video_with_prebuffer done. Memory After cleanup")
-        self._log_manager.info(
-            "Memory after recording: {}".format(gc.mem_free())
-        )
+        self._log_manager.info("Memory after recording: {}".format(gc.mem_free()))
         self.stop_recording_state()  # Restore the default camera state after recording.
         return RecordState.PREPARE
 
