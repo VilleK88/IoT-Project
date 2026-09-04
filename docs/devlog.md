@@ -1064,3 +1064,10 @@ a 2-second post-FFC recovery proved insufficient, so the recovery period was inc
 - Updated comments to match the current recording, motion-detection, buffering, upload, and configuration behavior.
 - Removed obsolete experimental comments and duplicate comments.
 - Moved the garbage-collection threshold configuration into the main application initialization for clearer organization.
+
+## 2026-09-04
+- Updated the upload workflow so successfully uploaded recordings are retained on the SD card instead of being deleted.
+- Added sent-file marking by renaming successfully uploaded recordings with the sent_ prefix.
+- Updated file discovery so sent recordings are excluded from future upload attempts.
+- Updated file numbering so both sent and unsent recordings are considered when selecting the next event number.
+- Updated Lepton motion detection to process a copy of the current thermal frame so the original captured frame remains unmodified.

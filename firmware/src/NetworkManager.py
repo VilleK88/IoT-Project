@@ -125,8 +125,9 @@ class NetworkManager:
                             file = new_file
                         upload_succeeded = await self.upload_mjpeg(file)
                         if upload_succeeded:
-                            self._file_manager.delete_file(file)
-                            self._log_manager.info(f"File deleted {file}")
+                            #self._file_manager.delete_file(file)
+                            #self._log_manager.info(f"File deleted {file}")
+                            self._file_manager.mark_file_as_sent(file)
                     except Exception as error:
                         self._log_manager.error("Upload file error: {}".format(error))
                     finally:

@@ -48,12 +48,15 @@ class FileManager:
         highest = self._storage_config.init_file_num()
         # Search for the highest existing file number.
         for filename in os.listdir(directory):
-            if filename.startswith(prefix) and filename.endswith(suffix):
-                number_part = filename[len(prefix):-len(suffix)]
+            name = filename
+            if name.startswith("sent_"):
+                name = name[len("sent_"):]
+            if name.startswith(prefix) and name.endswith(suffix):
+                number_part = name[len(prefix):-len(suffix)]
                 number = int(number_part)
                 if number > highest:
                     highest = number
-        # Continue numbering after the highest existing file.
+            # Continue numbering after the highest existing file.
         return highest + 1
 
     # Builds a unique filename using the configured directory,
@@ -202,7 +205,7 @@ class FileManager:
         if directory:
             mjpeg_files = []
             for file in directory:
-                if file.lower().endswith(".mjpeg"):
+                if file.startswith("video") and file.lower().endswith(".mjpeg"):
                     filename = self._storage_config.vid_dir() + "/" + file
                     mjpeg_files.append(filename)
             print("Directory is not empty.")
@@ -217,6 +220,11 @@ class FileManager:
             print(filename, "removed")
         except OSError as error:
             print("Failed to remove", filename, ":", error)
+
+    def mark_file_as_sent(self, filename):
+        name = filename.split("/")[-1]
+        new_filename = self._storage_config.vid_dir() + "/sent_" + name
+        os.rename(filename, new_filename)
 
     def _get_storage_capacity(self):
         stats = os.statvfs("/sdcard")  # Get filesystem statistics.

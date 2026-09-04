@@ -40,6 +40,7 @@ class CameraLepton(Camera):
         self._current_frame = (
             self.csi1.snapshot(time=self.cam_config.lepton_stabilization_ms())
         )
+        self._current_frame_edited = None
 
         self._extra_fb = image.Image(self.csi1.width(), self.csi1.height(), self.csi1.pixformat())
         print("About to save background image...")
@@ -72,37 +73,41 @@ class CameraLepton(Camera):
 
     # Thermal frame differencing.
     def detect_motion_lepton(self):
-        img = self._current_frame
-        if img:
-            self._frame_count += 1
-            if self._frame_count > self._mot_conf.bg_update_frames():
-                self._frame_count = 0
-                img.blend(self._extra_fb, alpha=(255 - self._mot_conf.bg_update_blend()))
-                self._extra_fb.draw_image(img)
-            img.difference(self._extra_fb)
-            hist = img.get_histogram()
-            diff = (hist.get_percentile(
-                self._mot_conf.hist_high_percentile()).l_value -
-                    hist.get_percentile(self._mot_conf.hist_low_percentile()).l_value)
-            return diff > self._mot_conf.trigger_threshold()
+        if self._current_frame:
+            self._current_frame_edited = self._current_frame.copy()
+            if self._current_frame_edited:
+                self._frame_count += 1
+                if self._frame_count > self._mot_conf.bg_update_frames():
+                    self._frame_count = 0
+                    self._current_frame_edited.blend(self._extra_fb, alpha=(255 - self._mot_conf.bg_update_blend()))
+                    self._extra_fb.draw_image(self._current_frame_edited)
+                self._current_frame_edited.difference(self._extra_fb)
+                hist = self._current_frame_edited.get_histogram()
+                diff = (hist.get_percentile(
+                    self._mot_conf.hist_high_percentile()).l_value -
+                        hist.get_percentile(self._mot_conf.hist_low_percentile()).l_value)
+                return diff > self._mot_conf.trigger_threshold()
+            return False
         return False
 
     async def detect_motion_async_lepton(self):
-        img = self._current_frame
-        if img:
-            self._frame_count += 1
-            if self._frame_count > self._mot_conf.bg_update_frames():
-                self._frame_count = 0
-                img.blend(self._extra_fb, alpha=(255 - self._mot_conf.bg_update_blend()))
-                self._extra_fb.draw_image(img)
-            # Compare the current temperature-filtered frame against the
-            # temperature-filtered background frame.
-            img.difference(self._extra_fb)
-            hist = img.get_histogram()
-            diff = (hist.get_percentile(
-                self._mot_conf.hist_high_percentile()).l_value -
-                    hist.get_percentile(self._mot_conf.hist_low_percentile()).l_value)
-            return diff > self._mot_conf.trigger_threshold()
+        if self._current_frame:
+            self._current_frame_edited = self._current_frame.copy()
+            if self._current_frame_edited:
+                self._frame_count += 1
+                if self._frame_count > self._mot_conf.bg_update_frames():
+                    self._frame_count = 0
+                    self._current_frame_edited.blend(self._extra_fb, alpha=(255 - self._mot_conf.bg_update_blend()))
+                    self._extra_fb.draw_image(self._current_frame_edited)
+                # Compare the current temperature-filtered frame against the
+                # temperature-filtered background frame.
+                self._current_frame_edited.difference(self._extra_fb)
+                hist = self._current_frame_edited.get_histogram()
+                diff = (hist.get_percentile(
+                    self._mot_conf.hist_high_percentile()).l_value -
+                        hist.get_percentile(self._mot_conf.hist_low_percentile()).l_value)
+                return diff > self._mot_conf.trigger_threshold()
+            return False
         return False
 
     def write_prebuffer_with_catchup_lepton(self):
