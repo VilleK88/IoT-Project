@@ -10,7 +10,7 @@
 
 * Installed bundled microSD card.
 * Discovered existing project data on the card, including images, configuration files, Wi-Fi credentials, TLS certificate, and device identifiers.
-* Determined that the card had likely been used in a previous OpenMV project.
+* Determined that the card had likely been used in a previous project.
 * Cleared the card for project use.
 
 ### OpenMV Exploration
