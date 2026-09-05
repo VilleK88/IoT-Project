@@ -144,20 +144,24 @@ class NetworkManager:
         self._log_manager.info("[DEBUG] Upload started: {}".format(filename))
         self._tools.cleanup_memory()
         self._tools.print_memory_status("Memory after cleanup -> next uploading")
+
         metadata = self._file_manager.get_video_metadata(filename)
         data = {
             "camera_id": self._camera_config.camera_id(),
             "event_id": metadata["event_id"],
             "sensor": metadata["sensor"]
         }
+
         self._log_manager.info("[DEBUG] Requesting presigned URL")
         # Request a presigned S3 upload URL and separate it into
         # the hostname and request path required for the HTTP request.
         upload_url = await self._get_upload_url(data)
         self._log_manager.info("[DEBUG] Presigned URL received")
+
         host, path = self._parse_https_url(upload_url)
         # Read the file size for the HTTP Content-Length header.
         file_size = os.stat(filename)[6]
+
         print("Uploading:", filename)
         print("File size:", file_size)
 
@@ -166,30 +170,17 @@ class NetworkManager:
 
         try:
             self._log_manager.info("[DEBUG] Opening S3 TLS connection")
+
             reader, writer = await asyncio.open_connection(
                 host, self._upload_config.https_port(), ssl=True
             )
-            self._log_manager.info("[DEBUG] S3 TLS connected")
-            # Build the HTTP PUT request header.
-            # The presigned URL already contains the authentication
-            # parameters required by S3.
-            request_header= (
-                "PUT {} HTTP/1.1\r\n"
-                "Host: {}\r\n"
-                "Content-Length: {}\r\n"
-                "Connection: close\r\n"
-                "\r\n"
-            ).format(path, host, file_size)
 
-            # Send the complete request header before transmitting
-            # the MJPEG file contents
-            writer.write(request_header.encode())
-            await writer.drain()
+            self._log_manager.info("[DEBUG] S3 TLS connected")
+
+            await self._send_upload_header(writer, host, path, file_size)
 
             upload_start_time = time.ticks_ms()
             last_upload_progress = time.ticks_ms()
-
-            bytes_sent = 0
 
             # Allocate the upload block once and reuse it for the complete file.
             # This avoids allocating a new bytes object for every file read.
@@ -231,7 +222,6 @@ class NetworkManager:
                             print("Upload stream timeout")
                             return False
 
-                        bytes_sent += bytes_read
                         last_upload_progress = time.ticks_ms()
 
                 except Exception as err:
@@ -241,23 +231,7 @@ class NetworkManager:
 
             self._log_manager.info("[DEBUG] File streaming completed")
 
-            # Read the first line of the HTTP response, for example:
-            # HTTP/1.1 200 OK
-            status_line = await reader.readline()
-            self._log_manager.info("[DEBUG] S3 response received")
-            # A missing response usually means that the connection was
-            # closed before S3 returned an HTTP status.
-            if not status_line:
-                self._log_manager.info("[DEBUG] No response received from S3")
-                raise OSError("No response received from S3")
-            print("S3 response:", status_line)
-            # A successful S3 PUT upload returns HTTP status 200.
-            # Read and print the remaining response only when the upload fails.
-            if b" 200 " not in status_line:
-                response_body = await reader.read()
-                print("S3 error response:", response_body)
-                self._log_manager.info("[DEBUG] MJPEG upload failed")
-                raise OSError("MJPEG upload failed")
+            await self._check_upload_response(reader)
 
             self._log_manager.info(f"{filename} uploaded successfully")
             # Calculate the total upload duration and average transfer speed.
@@ -280,6 +254,48 @@ class NetworkManager:
                 except Exception as error:
                     self._log_manager.info("[DEBUG] Writer close error")
                     print("Writer close error:", error)
+
+    async def _send_upload_header(self, writer, host, path, file_size):
+        # Build the HTTP PUT request header.
+        # The presigned URL already contains the authentication
+        # parameters required by S3.
+        request_header = (
+            "PUT {} HTTP/1.1\r\n"
+            "Host: {}\r\n"
+            "Content-Length: {}\r\n"
+            "Connection: close\r\n"
+            "\r\n"
+        ).format(path, host, file_size)
+
+        # Send the complete request header before transmitting
+        # the MJPEG file contents.
+        writer.write(request_header.encode())
+        await writer.drain()
+
+    async def _check_upload_response(self, reader):
+        # Read the first line of the HTTP response, for example:
+        # HTTP/1.1 200 OK
+        status_line = await reader.readline()
+
+        self._log_manager.info("[DEBUG] S3 response received")
+
+        # A missing response usually means that the connection was
+        # closed before S3 returned an HTTP status.
+        if not status_line:
+            self._log_manager.info("[DEBUG] No response received from S3")
+            raise OSError("No response received from S3")
+
+        print("S3 response:", status_line)
+
+        # A successful S3 PUT upload returns HTTP status 200.
+        # Read and print the remaining response only when the upload fails.
+        if b" 200 " not in status_line:
+            response_body = await reader.read()
+            print("S3 error response:", response_body)
+
+            self._log_manager.info("[DEBUG] MJPEG upload failed")
+
+            raise OSError("MJPEG upload failed")
 
     # Sends a JSON POST request over HTTPS and returns the JSON response.
     async def _post_json(self, url, data):

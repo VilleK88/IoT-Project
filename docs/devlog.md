@@ -1071,3 +1071,10 @@ a 2-second post-FFC recovery proved insufficient, so the recovery period was inc
 - Updated file discovery so sent recordings are excluded from future upload attempts.
 - Updated file numbering so both sent and unsent recordings are considered when selecting the next event number.
 - Updated Lepton motion detection to process a copy of the current thermal frame so the original captured frame remains unmodified.
+
+## 2026-09-05
+- Refactored the S3 MJPEG upload code to improve readability and separate responsibilities.
+- Extracted HTTP PUT request-header creation and transmission into a dedicated helper function.
+- Extracted S3 HTTP response validation into a dedicated helper function.
+- Removed unused upload byte-counting code.
+- Kept the file-streaming logic inside the main upload function as the core upload operation.
