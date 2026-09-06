@@ -128,6 +128,9 @@ class NetworkManager:
                             #self._file_manager.delete_file(file)
                             #self._log_manager.info(f"File deleted {file}")
                             self._file_manager.mark_file_as_sent(file)
+                        else:
+                            self._log_manager.warning("Upload cycle stopped after faild upload")
+                            break
                     except Exception as error:
                         self._log_manager.error("Upload file error: {}".format(error))
                     finally:

@@ -1088,3 +1088,12 @@ a 2-second post-FFC recovery proved insufficient, so the recovery period was inc
 - Unsent files remain available for a later upload attempt.
 - Existing cleanup logic closes the file and TLS connection.
 
+
+## 2026-09-06
+### Improved Failed-Upload Handling
+
+- Added an upload-result check after each S3 upload attempt.
+- The upload cycle now stops when an upload fails.
+- Failed files remain unsent and are retried during a later upload cycle.
+- This prevents the same large PAG file from being retried repeatedly during one cycle.
+
