@@ -54,7 +54,7 @@ class NetworkManager:
         else:
             print("Wi-Fi not connected")
 
-    async def reconnect(self):
+    async def _reconnect(self):
         for delay in self._upload_config.backoff_s():
             self._wlan.disconnect()
             self._wlan.connect(self._ssid, self._key)
@@ -74,13 +74,13 @@ class NetworkManager:
             await asyncio.sleep(delay)
         return False
 
-    async def radio_power_cycle(self):
+    async def _radio_power_cycle(self):
         print("Power cycling Wi-Fi interface")
         self._log_manager.info("Power cycling Wi-Fi interface")
         self._wlan.active(False)
         await asyncio.sleep(self._upload_config.radio_restart_delay_s())
         self._wlan.active(True)
-        return await self.reconnect()
+        return await self._reconnect()
 
     def _sync_time(self):
         # NTP initially sets the RTC to UTC.
@@ -100,9 +100,9 @@ class NetworkManager:
                 if self._wlan.isconnected():
                     await self._upload_mjpeg_files()
                 else:
-                    reconnected = await self.reconnect()
+                    reconnected = await self._reconnect()
                     if not reconnected:
-                        await self.radio_power_cycle()
+                        await self._radio_power_cycle()
             except Exception as error:
                 # Network/AWS failures must never terminate the embedded system.
                 print("Upload task error:", error)
@@ -123,7 +123,7 @@ class NetworkManager:
                         new_file = self._file_manager.check_if_lepton(file)
                         if new_file:
                             file = new_file
-                        upload_succeeded = await self.upload_mjpeg(file)
+                        upload_succeeded = await self._upload_mjpeg(file)
                         if upload_succeeded:
                             #self._file_manager.delete_file(file)
                             #self._log_manager.info(f"File deleted {file}")
@@ -140,7 +140,7 @@ class NetworkManager:
                     break
 
     # Uploads an MJPEG file to AWS S3 using a presigned URL.
-    async def upload_mjpeg(self, filename):
+    async def _upload_mjpeg(self, filename):
         self._log_manager.info("[DEBUG] Upload started: {}".format(filename))
         self._tools.cleanup_memory()
         self._tools.print_memory_status("Memory after cleanup -> next uploading")
@@ -193,36 +193,40 @@ class NetworkManager:
             with open(filename, "rb") as file:
                 try:
                     while True:
-                        now = time.ticks_ms()
-                        if time.ticks_diff(now, last_upload_progress) > 10000:
-                            self._log_manager.warning("Upload interrupted too long, retrying later")
-                            return False
+                        if self._wlan.isconnected():
+                            now = time.ticks_ms()
+                            if time.ticks_diff(now, last_upload_progress) > 10000:
+                                self._log_manager.warning("Upload interrupted too long, retrying later")
+                                return False
 
-                        # Read the next block directly into the existing chunk buffer.
-                        try:
-                            bytes_read = file.readinto(chunk)
-                        except Exception as err:
-                            self._log_manager.error("SD card read failed: {}".format(err))
-                            return False
-                        # An empty read indicates that the end of the file
-                        # has been reached.
-                        if not bytes_read:
-                            break
-                        # Ensure the complete block is written before reading
-                        try:
-                            writer.write(mv[:bytes_read])
-                        except Exception as err:
-                            self._log_manager.error("Upload socket write failed: {}".format(err))
-                            return False
+                            # Read the next block directly into the existing chunk buffer.
+                            try:
+                                bytes_read = file.readinto(chunk)
+                            except Exception as err:
+                                self._log_manager.error("SD card read failed: {}".format(err))
+                                return False
+                            # An empty read indicates that the end of the file
+                            # has been reached.
+                            if not bytes_read:
+                                break
+                            # Ensure the complete block is written before reading
+                            try:
+                                writer.write(mv[:bytes_read])
+                            except Exception as err:
+                                self._log_manager.error("Upload socket write failed: {}".format(err))
+                                return False
 
-                        try:
-                            await asyncio.wait_for(writer.drain(), 10)
-                        except asyncio.TimeoutError:
-                            self._log_manager.warning("Upload stream timeout")
-                            print("Upload stream timeout")
-                            return False
+                            try:
+                                await asyncio.wait_for(writer.drain(), 10)
+                            except asyncio.TimeoutError:
+                                self._log_manager.warning("Upload stream timeout")
+                                print("Upload stream timeout")
+                                return False
 
-                        last_upload_progress = time.ticks_ms()
+                            last_upload_progress = time.ticks_ms()
+                        else:
+                            self._log_manager.warning("Wi-Fi disconnected during upload, retrying later")
+                            return False
 
                 except Exception as err:
                     print("File streaming error", err)

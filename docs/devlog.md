@@ -1078,3 +1078,13 @@ a 2-second post-FFC recovery proved insufficient, so the recovery period was inc
 - Extracted S3 HTTP response validation into a dedicated helper function.
 - Removed unused upload byte-counting code.
 - Kept the file-streaming logic inside the main upload function as the core upload operation.
+
+## 2026-09-06
+### Improved Wi-Fi Handling During S3 Uploads
+
+- Added a Wi-Fi connection check inside the MJPEG streaming loop.
+- The upload stops if the device disconnects from Wi-Fi.
+- Interrupted uploads are recorded in the system log.
+- Unsent files remain available for a later upload attempt.
+- Existing cleanup logic closes the file and TLS connection.
+
