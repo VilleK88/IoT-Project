@@ -10,6 +10,7 @@ import requests
 import os
 import asyncio
 import json
+import gc
 
 class NetworkManager:
     # Initializes the network manager.
@@ -28,13 +29,16 @@ class NetworkManager:
         self._wlan = network.WLAN(network.STA_IF)
         self._wlan.active(True)
 
+        # References the currently running per-file upload task.
+        self._upload_task = None
+
     def initialize(self):
-        self.connect()
+        self._connect()
         if self._wlan.isconnected():
             self._sync_time()
 
     # Connects the device to the configured WiFi network.
-    def connect(self):
+    def _connect(self):
         self._wlan.connect(self._ssid, self._key)
 
         attempts = 0
@@ -95,8 +99,6 @@ class NetworkManager:
         await asyncio.sleep_ms(self._upload_config.startup_delay_ms())
         while True:
             try:
-                # Disable Wi-Fi power saving.
-                self._wlan.config(pm=network.WLAN.PM_NONE)
                 if self._wlan.isconnected():
                     await self._upload_mjpeg_files()
                 else:
@@ -107,9 +109,6 @@ class NetworkManager:
                 # Network/AWS failures must never terminate the embedded system.
                 print("Upload task error:", error)
                 self._log_manager.error("Upload task error: {}".format(error))
-            finally:
-                # Restore Wi-Fi power saving after the upload.
-                self._wlan.config(pm=network.WLAN.PM_POWERSAVE)
             await asyncio.sleep_ms(self._upload_config.upload_time_ms())
 
     async def _upload_mjpeg_files(self):
@@ -119,17 +118,29 @@ class NetworkManager:
                 if self._wlan.isconnected():
                     self._log_manager.info("[DEBUG] Upload cycle started")
                     self._tools.print_memory_status("Memory before upload")
+                    upload_succeeded = False
                     try:
                         new_file = self._file_manager.check_if_lepton(file)
                         if new_file:
                             file = new_file
-                        upload_succeeded = await self._upload_mjpeg(file)
+                        try:
+                            #upload_succeeded = await self._upload_mjpeg(file)
+                            self._upload_task = asyncio.create_task(self._upload_mjpeg(file))
+                            upload_succeeded = await self._upload_task
+                            #if upload_succeeded:
+                                #self._file_manager.delete_file(file)
+                                #self._log_manager.info(f"File deleted {file}")
+                                #self._file_manager.mark_file_as_sent(file)
+                        except asyncio.CancelledError:
+                            self._log_manager.warning("Upload interrupted for recording: {}".format(file))
+                        finally:
+                            self._upload_task = None
                         if upload_succeeded:
-                            #self._file_manager.delete_file(file)
-                            #self._log_manager.info(f"File deleted {file}")
+                            # self._file_manager.delete_file(file)
+                            # self._log_manager.info(f"File deleted {file}")
                             self._file_manager.mark_file_as_sent(file)
                         else:
-                            self._log_manager.warning("Upload cycle stopped after faild upload")
+                            self._log_manager.warning("Upload cycle stopped after failed upload")
                             break
                     except Exception as error:
                         self._log_manager.error("Upload file error: {}".format(error))
@@ -191,14 +202,20 @@ class NetworkManager:
             mv = memoryview(chunk)
 
             self._log_manager.info("[DEBUG] File streaming started")
+
+            uploaded_bytes = 0
+            last_memory_log = time.ticks_ms()
+
+            self._log_manager.info("Upload memory at start: {}".format(gc.mem_free()))
+
             # Stream the file directly from storage to S3 in blocks
             # instead of loading the complete MJPEG file into RAM.
-            with open(filename, "rb") as file:
+            with (open(filename, "rb") as file):
                 try:
                     while True:
                         if self._wlan.isconnected():
                             now = time.ticks_ms()
-                            if time.ticks_diff(now, last_upload_progress) > 10000:
+                            if time.ticks_diff(now, last_upload_progress) > self._upload_config.upload_progress_timeout_ms():
                                 self._log_manager.warning("Upload interrupted too long, retrying later")
                                 return False
 
@@ -208,10 +225,12 @@ class NetworkManager:
                             except Exception as err:
                                 self._log_manager.error("SD card read failed: {}".format(err))
                                 return False
+
                             # An empty read indicates that the end of the file
                             # has been reached.
                             if not bytes_read:
                                 break
+
                             # Ensure the complete block is written before reading
                             try:
                                 writer.write(mv[:bytes_read])
@@ -220,13 +239,26 @@ class NetworkManager:
                                 return False
 
                             try:
-                                await asyncio.wait_for(writer.drain(), 10)
+                                await asyncio.wait_for(writer.drain(), self._upload_config.stream_timeout_s())
                             except asyncio.TimeoutError:
                                 self._log_manager.warning("Upload stream timeout")
                                 print("Upload stream timeout")
                                 return False
 
                             last_upload_progress = time.ticks_ms()
+                            uploaded_bytes += bytes_read
+
+                            if time.ticks_diff(last_upload_progress, last_memory_log
+                            ) >= self._upload_config.memory_log_interval_ms():
+                                upload_percent = uploaded_bytes * 100 // file_size
+
+                                self._log_manager.info(
+                                    "Upload progress: {}%, free memory: {}".format(
+                                        upload_percent,
+                                        gc.mem_free()
+                                    )
+                                )
+                                last_memory_log = last_upload_progress
                         else:
                             self._log_manager.warning("Wi-Fi disconnected during upload, retrying later")
                             return False
@@ -236,9 +268,13 @@ class NetworkManager:
                     self._log_manager.error("File streaming error: {}".format(err))
                     return False
 
-            self._log_manager.info("[DEBUG] File streaming completed")
+            self._log_manager.info("Upload memory after streaming: {}".format(gc.mem_free()))
 
-            await self._check_upload_response(reader)
+            try:
+                await asyncio.wait_for(self._check_upload_response(reader), self._upload_config.response_timeout_s())
+            except asyncio.TimeoutError:
+                self._log_manager.warning("Upload response failed")
+                return False
 
             self._log_manager.info(f"{filename} uploaded successfully")
             # Calculate the total upload duration and average transfer speed.
@@ -247,6 +283,9 @@ class NetworkManager:
             print("Upload speed KiB/s:", (file_size * 1000) // upload_duration_ms // 1024)
             return True
 
+        except asyncio.CancelledError:
+            self._log_manager.warning("[WARNING] MJPEG upload cancelled before recording")
+            raise
         except Exception as error:
             print("MJPEG upload error:", error)
             self._log_manager.info("[DEBUG] MJPEG upload error")
@@ -394,3 +433,18 @@ class NetworkManager:
             host = remainder[:path_start]
             path = remainder[path_start:]
         return host, path
+
+    async def abort_upload(self):
+        if self._upload_task:
+            self._log_manager.warning("[WARNING] Stopping current upload before recording")
+            self._upload_task.cancel()
+            try:
+                # Wait until the upload has closed its file and TLS connection.
+                await self._upload_task
+            except asyncio.CancelledError:
+                pass
+            finally:
+                self._upload_task = None
+            self._log_manager.info("[INFO] Current upload stopped before recording")
+            return True
+        return False

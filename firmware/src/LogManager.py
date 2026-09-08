@@ -12,6 +12,9 @@ class LogManager:
         self._log_count = 0
         self._current_log = None
 
+        self._log_file_prefix = "log_"
+        self._log_file_suffix = ".txt"
+
     def initialize(self):
         self._log_count = self._find_next_log_number()
         self._open_new_log()
@@ -19,9 +22,9 @@ class LogManager:
     def _find_next_log_number(self):
         highest = -1
         for filename in os.listdir(self._storage_config.logs_dir()):
-            if filename.startswith("log_") and filename.endswith(".txt"):
+            if filename.startswith(self._log_file_prefix) and filename.endswith(self._log_file_suffix):
                 try:
-                    number = int(filename[4:-4])
+                    number = int(filename[len(self._log_file_prefix):-len(self._log_file_suffix)])
                     if number > highest:
                         highest = number
                 except ValueError as err:
@@ -30,10 +33,16 @@ class LogManager:
         return highest + 1
 
     def _open_new_log(self):
-        self._current_log = self._storage_config.logs_dir() + "/log_%05d.txt" % self._log_count
+        self._current_log = (
+                self._storage_config.logs_dir()
+                + "/"
+                + self._log_file_prefix
+                + "%05d" % self._log_count
+                + self._log_file_suffix
+        )
         self._log_count += 1
 
-    def write_log(self, lvl, msg):
+    def _write_log(self, lvl, msg):
         try:
             entry = "{} [{}] {}\n".format(self._time_manager.timestamp(), lvl, msg)
             self._ensure_log_space(len(entry))
@@ -76,10 +85,10 @@ class LogManager:
         return False
 
     def info(self, msg):
-        self.write_log("INFO", msg)
+        self._write_log("INFO", msg)
 
     def warning(self, msg):
-        self.write_log("WARNING", msg)
+        self._write_log("WARNING", msg)
 
     def error(self, msg):
-        self.write_log("ERROR", msg)
+        self._write_log("ERROR", msg)

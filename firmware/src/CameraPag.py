@@ -45,9 +45,18 @@ class CameraPag(Camera):
         self.saved_frames = 0
         self.live_frames_pag = 0
 
+        self._x_scale = (
+            self.cam_config.recording_width_pag()
+            / self.cam_config.buf_width_pag()
+        )
+        self._y_scale = (
+            self.cam_config.recording_height_pag()
+            / self.cam_config.buf_height_pag()
+        )
+
         self._tools.print_memory_status("After PAG7936 init")
 
-    def write_to_pag(self, frame):
+    def _write_to_pag(self, frame):
         try:
             self.video_pag.write(frame)
         except Exception as error:
@@ -56,7 +65,7 @@ class CameraPag(Camera):
 
     def record_frame(self):
         self._current_frame = self.csi0.snapshot()
-        self.write_to_pag(self._current_frame)
+        self._write_to_pag(self._current_frame)
         self.saved_frames += 1
 
     # Writes the buffered frames to the MJPEG file.
@@ -69,7 +78,7 @@ class CameraPag(Camera):
 
         # Retrieve the buffered frames in chronological order.
         prebuf_frames_pag, self._buffer_index = (
-            self.get_ordered_buf_frames(self._buffer, self._buffer_index)
+            self._get_ordered_buf_frames(self._buffer, self._buffer_index)
         )
 
         # Stores frames captured while the pre-buffer is being written.
@@ -78,8 +87,8 @@ class CameraPag(Camera):
 
         # Write the buffered frames to the MJPEG file.
         for frame in prebuf_frames_pag:
-            scaled_frame = self.scale_frame(frame)
-            self.write_to_pag(scaled_frame)
+            scaled_frame = self._scale_frame(frame)
+            self._write_to_pag(scaled_frame)
             self.saved_frames += 1
 
             # Periodically capture a new RGB frame while writing to
@@ -93,12 +102,12 @@ class CameraPag(Camera):
         # Append the frames captured during the pre-buffer write so the
         # transition from buffered video to live recording is as seamless as possible.
         for frame in catchup_frames_pag:
-            scaled_frame = self.scale_frame(frame)
-            self.write_to_pag(scaled_frame)
+            scaled_frame = self._scale_frame(frame)
+            self._write_to_pag(scaled_frame)
             self.saved_frames += 1
 
-    def scale_frame(self, frame):
-        self._scaled_frame.draw_image(frame, x_scale=2.0, y_scale=2.0)
+    def _scale_frame(self, frame):
+        self._scaled_frame.draw_image(frame, x_scale=self._x_scale, y_scale=self._y_scale)
         return self._scaled_frame
 
     # Periodically captures PAG7936 RGB frames into the circular RAM buffer.
@@ -121,7 +130,7 @@ class CameraPag(Camera):
 
     def prepare_video(self, file_manager):
         # Create a new MJPEG file and prepare the camera for recording.
-        self.filename_pag, self.video_pag = self.create_motion_video(
+        self.filename_pag, self.video_pag = self._create_motion_video(
             file_manager,
             self._storage_config.video_prefix_pag(),
             self.cam_config.recording_width_pag(),
@@ -144,17 +153,17 @@ class CameraPag(Camera):
     def stop_recording_mode(self):
         self.csi0.framesize(csi.VGA)
 
-    def buffer(self):
+    """def buffer(self):
         return self._buffer
 
     def buffer_index(self):
         return self._buffer_index
 
     def last_frame_time(self):
-        return self._last_frame_time
+        return self._last_frame_time"""
 
     def frame_interval_ms(self):
         return self._frame_interval_ms
 
-    def ring_buffer_fill_count(self):
-        return self._ring_buf_fil_count
+    """def ring_buffer_fill_count(self):
+        return self._ring_buf_fil_count"""

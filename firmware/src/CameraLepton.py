@@ -53,13 +53,16 @@ class CameraLepton(Camera):
         self._ffc_check_interval_ms = 1000
         self._ffc_recalibration_time_ms = 5000
 
+        self._lepton_ffc_status_attribute = 0x0244
+        self._lepton_ffc_status_word_count = 2
+
         self.filename_lepton = None
         self.video_lepton = None
         self.saved_frames = 0
 
         self._tools.print_memory_status("After Lepton init")
 
-    def write_to_lepton(self, frame):
+    def _write_to_lepton(self, frame):
         try:
             self.video_lepton.write(frame)
         except Exception as error:
@@ -68,7 +71,7 @@ class CameraLepton(Camera):
 
     def record_frame(self):
         self._current_frame = self.csi1.snapshot()
-        self.write_to_lepton(self._current_frame)
+        self._write_to_lepton(self._current_frame)
         self.saved_frames += 1
 
     # Thermal frame differencing.
@@ -79,7 +82,7 @@ class CameraLepton(Camera):
                 self._frame_count += 1
                 if self._frame_count > self._mot_conf.bg_update_frames():
                     self._frame_count = 0
-                    self._current_frame_edited.blend(self._extra_fb, alpha=(255 - self._mot_conf.bg_update_blend()))
+                    self._current_frame_edited.blend(self._extra_fb, alpha=(self._mot_conf.blend_alpha_max() - self._mot_conf.bg_update_blend()))
                     self._extra_fb.draw_image(self._current_frame_edited)
                 self._current_frame_edited.difference(self._extra_fb)
                 hist = self._current_frame_edited.get_histogram()
@@ -97,7 +100,7 @@ class CameraLepton(Camera):
                 self._frame_count += 1
                 if self._frame_count > self._mot_conf.bg_update_frames():
                     self._frame_count = 0
-                    self._current_frame_edited.blend(self._extra_fb, alpha=(255 - self._mot_conf.bg_update_blend()))
+                    self._current_frame_edited.blend(self._extra_fb, alpha=(self._mot_conf.blend_alpha_max() - self._mot_conf.bg_update_blend()))
                     self._extra_fb.draw_image(self._current_frame_edited)
                 # Compare the current temperature-filtered frame against the
                 # temperature-filtered background frame.
@@ -117,7 +120,7 @@ class CameraLepton(Camera):
 
         # Retrieve the buffered frames in chronological order.
         prebuf_frames_lepton, self._buffer_index = (
-            self.get_ordered_buf_frames(self._buffer, self._buffer_index)
+            self._get_ordered_buf_frames(self._buffer, self._buffer_index)
         )
 
         # Stores frames captured while the pre-buffer is being written.
@@ -126,7 +129,7 @@ class CameraLepton(Camera):
 
         # Write the buffered frames to the MJPEG file.
         for frame in prebuf_frames_lepton:
-            self.write_to_lepton(frame)
+            self._write_to_lepton(frame)
             self.saved_frames += 1
             now = time.ticks_ms()
             if time.ticks_diff(now, last_live_frame_time_lepton) >= self._frame_interval_ms:
@@ -137,7 +140,7 @@ class CameraLepton(Camera):
         # Append the frames captured during the pre-buffer write so the
         # transition from buffered video to live recording is as seamless as possible.
         for frame in catchup_frames_lepton:
-            self.write_to_lepton(frame)
+            self._write_to_lepton(frame)
             self.saved_frames += 1
 
     async def update_frame_buffer_lepton(self):
@@ -161,11 +164,15 @@ class CameraLepton(Camera):
     # The functions below monitor the Lepton FFC state, suspend thermal motion
     # detection while calibration is active, wait for the image to stabilize,
     # and then replace the old frame-difference background with a new reference.
-    def get_ffc_status(self):
+    def _get_ffc_status(self):
         # Read the Lepton FFC status attribute.
         # 0x0244 identifies the FFC status attribute and 2 requests
         # two 16-bit words (32 bits) from the Lepton.
-        data = self.csi1.ioctl(csi.IOCTL_LEPTON_GET_ATTRIBUTE, 0x0244, 2)
+        data = self.csi1.ioctl(
+            csi.IOCTL_LEPTON_GET_ATTRIBUTE,
+            self._lepton_ffc_status_attribute,
+            self._lepton_ffc_status_word_count
+        )
         # Convert the four returned bytes into a 32-bit little-endian integer.
         return ustruct.unpack("<I", data)[0]
 
@@ -177,7 +184,7 @@ class CameraLepton(Camera):
         # but query the Lepton FFC status only once per configured interval.
         if time.ticks_diff(now, self._last_ffc_check_time) >= self._ffc_check_interval_ms:
             self._last_ffc_check_time = now
-            ffc_status = self.get_ffc_status()
+            ffc_status = self._get_ffc_status()
             # A non-zero status means that the Lepton is currently performing FFC.
             # Motion detection must be skipped because FFC changes the thermal image
             # and could otherwise be interpreted as movement.
@@ -220,7 +227,7 @@ class CameraLepton(Camera):
 
     def prepare_video(self, file_manager):
         # Create a new MJPEG file and prepare the camera for recording.
-        self.filename_lepton, self.video_lepton = self.create_motion_video(
+        self.filename_lepton, self.video_lepton = self._create_motion_video(
             file_manager,
             self._storage_config.video_prefix_lepton(),
             self.cam_config.width_lepton(),
@@ -237,17 +244,17 @@ class CameraLepton(Camera):
         )
         file_manager.patch_mjpeg_index(self.filename_lepton)
 
-    def buffer(self):
+    """def buffer(self):
         return self._buffer
 
     def buffer_index(self):
         return self._buffer_index
 
     def last_frame_time(self):
-        return self._last_frame_time
+        return self._last_frame_time"""
 
     def frame_interval_ms(self):
         return self._frame_interval_ms
 
-    def ring_buffer_fill_count(self):
-        return self._ring_buf_fil_count
+    """def ring_buffer_fill_count(self):
+        return self._ring_buf_fil_count"""

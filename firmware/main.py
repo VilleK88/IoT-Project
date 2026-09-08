@@ -11,7 +11,7 @@ import gc
 
 async def main():
     # Garbage-collection threshold for the full system.
-    gc.threshold(5_000_000)
+    gc.threshold(5_000_000) # 5_000_000
 
     file_manager = FileManager()
     log_manager = LogManager(file_manager)
@@ -26,7 +26,9 @@ async def main():
 
     camera_pag = CameraPag(log_manager)
     camera_lepton = CameraLepton(log_manager)
-    camera_manager = CameraManager(file_manager, log_manager, watchdog, camera_pag, camera_lepton)
+    camera_manager = CameraManager(
+        file_manager, log_manager, watchdog, network_manager, camera_pag, camera_lepton
+    )
 
     await asyncio.gather(
         watchdog.watchdog_task(),

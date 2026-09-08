@@ -35,7 +35,7 @@ class Camera:
             await asyncio.sleep_ms(0)
 
     # Returns the buffered frames in chronological order.
-    def get_ordered_buf_frames(self, this_buffer, this_index):
+    def _get_ordered_buf_frames(self, this_buffer, this_index):
         frames = []
         # Start from the oldest frame in the circular buffer.
         # _buf_index always points to the next position that will be overwritten.
@@ -68,7 +68,7 @@ class Camera:
         self._last_frame_time = time.ticks_ms()
 
     # Creates a new MJPEG file for motion recording.
-    def create_motion_video(self, file_manager, prefix, this_width : int, this_height : int):
+    def _create_motion_video(self, file_manager, prefix, this_width : int, this_height : int):
         # Build a unique filename using the configured folder, prefix,
         # suffix and the next available video number.
         filename = file_manager.build_filename(

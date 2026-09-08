@@ -17,16 +17,17 @@ class CameraManager:
                  file_manager,
                  log_manager,
                  watchdog,
+                 network_manager,
                  camera_pag,
                  camera_lepton):
 
         self._record_state = RecordState.PREPARE
 
         self._state_handlers = {
-            RecordState.PREPARE: self.prepare_state,
-            RecordState.PREBUFFER: self.prebuffer_state,
-            RecordState.RECORDING: self.recording_state,
-            RecordState.FINALIZING: self.finalizing_state,
+            RecordState.PREPARE: self._prepare_state,
+            RecordState.PREBUFFER: self._prebuffer_state,
+            RecordState.RECORDING: self._recording_state,
+            RecordState.FINALIZING: self._finalizing_state,
         }
 
         self._storage_config = StorageConfig()
@@ -35,6 +36,7 @@ class CameraManager:
         self._log_manager = log_manager
         self._watchdog = watchdog
         self._tools = Tools()
+        self._network_manager = network_manager
 
         # Recording state
         self._led = machine.LED("LED_RED")
@@ -58,9 +60,10 @@ class CameraManager:
                 if await self._camera_lepton.detect_motion_async_lepton():
                     print("camera.record_video()")
                     if self._file_manager.video_space_available():
-                        self._log_manager.info("Video recording started")
                         try:
-                            self.record_state_machine()
+                            await self._network_manager.abort_upload()
+                            self._log_manager.info("Video recording started")
+                            self._record_state_machine()
                             self._log_manager.info("Video recording completed")
                         except Exception as err:
                             self._log_manager.error("Video recording failed: {}".format(err))
@@ -68,9 +71,9 @@ class CameraManager:
                     else:
                         print("Video storage quota reached")
                         self._log_manager.warning("Video storage quota reached")
-            await asyncio.sleep_ms(self._mot_conf.chk_mot_ms())
+            await asyncio.sleep_ms(self._mot_conf.chk_mot_ms_idle())
 
-    def record_state_machine(self):
+    def _record_state_machine(self):
         try:
             while True:
                 handler = self._state_handlers[self._record_state]
@@ -84,7 +87,7 @@ class CameraManager:
         finally:
             self._record_state = RecordState.PREPARE
 
-    def prepare_state(self):
+    def _prepare_state(self):
         print("prepare state")
         # Create a new MJPEG files and prepare the cameras for recording.
         self._camera_pag.prepare_video(self._file_manager)
@@ -93,16 +96,16 @@ class CameraManager:
         self._file_manager.increase_video_count()
         return RecordState.PREBUFFER
 
-    def prebuffer_state(self):
+    def _prebuffer_state(self):
         print("prebuffer state")
         # Write the buffered RGB frames before switching the PAG7936 to HD mode.
         self._camera_pag.write_prebuffer_with_catchup_pag(),
         self._camera_lepton.write_prebuffer_with_catchup_lepton()
         return RecordState.RECORDING
 
-    def recording_state(self):
+    def _recording_state(self):
         print("recording state")
-        self.start_recording_state()
+        self._start_recording_state()
 
         recording_start_time = time.ticks_ms()
         last_watchdog_feed = time.ticks_ms()
@@ -134,7 +137,7 @@ class CameraManager:
                 self._camera_pag.live_frames_pag += 1
 
                 # Check for movement at the configured interval.
-                if time.ticks_diff(now, last_motion_check) >= self._mot_conf.chk_mot_ms():
+                if time.ticks_diff(now, last_motion_check) >= self._mot_conf.chk_mot_ms_recording():
                     last_motion_check = now
                     # Ignore thermal motion detection during or immediately after FFC.
                     if not self._camera_lepton.handle_ffc():
@@ -149,7 +152,7 @@ class CameraManager:
 
         return RecordState.FINALIZING
 
-    def finalizing_state(self):
+    def _finalizing_state(self):
         print("finalizing state")
 
         live_recording_duration = time.ticks_diff(
@@ -181,17 +184,17 @@ class CameraManager:
 
         self._tools.print_memory_status("record_video_with_prebuffer done. Memory After cleanup")
         self._log_manager.info("Memory after recording: {}".format(gc.mem_free()))
-        self.stop_recording_state()  # Restore the default camera state after recording.
+        self._stop_recording_state()  # Restore the default camera state after recording.
         return RecordState.PREPARE
 
     # Enables the hardware and camera settings required for recording.
-    def start_recording_state(self):
+    def _start_recording_state(self):
         self._led.on()  # Turn on the recording status LED.
         self._camera_pag.start_recording_mode()
         print("CSI resolution:", self._camera_pag.csi0.width(), self._camera_pag.csi0.height())
 
     # Restores the camera state after recording has finished.
-    def stop_recording_state(self):
+    def _stop_recording_state(self):
         # Remove any buffered frames so the next recording starts with
         # a fresh circular buffer.
         self._camera_pag.clear_frame_buffer()

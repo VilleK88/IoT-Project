@@ -1097,3 +1097,18 @@ a 2-second post-FFC recovery proved insufficient, so the recovery period was inc
 - Failed files remain unsent and are retried during a later upload cycle.
 - This prevents the same large PAG file from being retried repeatedly during one cycle.
 
+
+## 2026-09-08
+# Upload Stability and Recording Priority
+
+- Removed explicit Wi-Fi power-saving switching around uploads.
+- Added upload cancellation and source-file/TLS cleanup before recording.
+- Kept interrupted files unsent for retries and stopped the upload cycle after unsuccessful uploads.
+- Set upload chunks to 4096 bytes and logged upload progress and free memory every 10 seconds.
+- Moved upload timeouts into UploadConfig.
+- Renamed internal methods with a leading underscore and replaced selected magic numbers with named values inside classes.
+- Calculated PAG scaling factors from configured image dimensions.
+- Set maximum recording duration to 30 seconds and recording motion checks to 500 ms, retaining the 5 FPS target.
+- Started the test on 7 September 2026 at 15:59:56 and ran continuously for 13 hours 27 minutes without crashes.
+- Subsequent crashes occurred when signing in to Windows or moving the hotspot phone to another room.
+- The system resumed autonomous operation after rebooting and was still running on 8 September 2026 at 08:10.

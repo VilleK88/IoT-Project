@@ -1,11 +1,13 @@
 class MotionConfig:
     def __init__(self):
-        self._chk_mot_ms = 200 # 200 = 5 times per second
+        self._chk_mot_ms_idle = 1000 # 1 times per second
+        self._chk_mot_ms_recording = 500  # Check motion 2 times per second
         self._init_file_num = -1  # Initial file counter value
         self._motion_timeout_ms = 5000  # 5 seconds
 
         self._trigger_threshold = 5  # original 5
         self._bg_update_frames = 5
+        self._blend_alpha_max = 255
         self._bg_update_blend = 128
 
         self._min_temp_in_celsius = 20.0  # Minimum temperature represented by grayscale value 0.
@@ -14,8 +16,11 @@ class MotionConfig:
         self._hist_low_percentile = 0.90
         self._hist_high_percentile = 0.99
 
-    def chk_mot_ms(self):
-        return self._chk_mot_ms
+    def chk_mot_ms_idle(self):
+        return self._chk_mot_ms_idle
+
+    def chk_mot_ms_recording(self):
+        return self._chk_mot_ms_recording
 
     def init_file_num(self):
         return self._init_file_num
@@ -28,6 +33,9 @@ class MotionConfig:
 
     def bg_update_frames(self):
         return self._bg_update_frames
+
+    def blend_alpha_max(self):
+        return self._blend_alpha_max
 
     def bg_update_blend(self):
         return self._bg_update_blend
