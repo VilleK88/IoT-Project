@@ -116,7 +116,7 @@ class NetworkManager:
         if files:
             for file in files:
                 if self._wlan.isconnected():
-                    self._log_manager.info("[DEBUG] Upload cycle started")
+                    self._log_manager.info("Upload cycle started")
                     self._tools.print_memory_status("Memory before upload")
                     upload_succeeded = False
                     try:
@@ -145,7 +145,7 @@ class NetworkManager:
                     except Exception as error:
                         self._log_manager.error("Upload file error: {}".format(error))
                     finally:
-                        self._log_manager.info("[DEBUG] Post-upload cleanup started")
+                        self._log_manager.info("Post-upload cleanup started")
                         self._tools.cleanup_memory()
                         self._tools.print_memory_status("Memory after upload cleanup")
                         # Give the network stack time to release TLS resources.
@@ -155,7 +155,7 @@ class NetworkManager:
 
     # Uploads an MJPEG file to AWS S3 using a presigned URL.
     async def _upload_mjpeg(self, filename):
-        self._log_manager.info("[DEBUG] Upload started: {}".format(filename))
+        self._log_manager.info("Upload started: {}".format(filename))
         self._tools.cleanup_memory()
         self._tools.print_memory_status("Memory after cleanup -> next uploading")
 
@@ -166,11 +166,11 @@ class NetworkManager:
             "sensor": metadata["sensor"]
         }
 
-        self._log_manager.info("[DEBUG] Requesting presigned URL")
+        self._log_manager.info("Requesting presigned URL")
         # Request a presigned S3 upload URL and separate it into
         # the hostname and request path required for the HTTP request.
         upload_url = await self._get_upload_url(data)
-        self._log_manager.info("[DEBUG] Presigned URL received")
+        self._log_manager.info("Presigned URL received")
 
         host, path = self._parse_https_url(upload_url)
         # Read the file size for the HTTP Content-Length header.
@@ -183,13 +183,13 @@ class NetworkManager:
         writer = None
 
         try:
-            self._log_manager.info("[DEBUG] Opening S3 TLS connection")
+            self._log_manager.info("Opening S3 TLS connection")
 
             reader, writer = await asyncio.open_connection(
                 host, self._upload_config.https_port(), ssl=True
             )
 
-            self._log_manager.info("[DEBUG] S3 TLS connected")
+            self._log_manager.info("S3 TLS connected")
 
             await self._send_upload_header(writer, host, path, file_size)
 
@@ -201,7 +201,7 @@ class NetworkManager:
             chunk = bytearray(self._upload_config.upload_chunk_size())
             mv = memoryview(chunk)
 
-            self._log_manager.info("[DEBUG] File streaming started")
+            self._log_manager.info("File streaming started")
 
             uploaded_bytes = 0
             last_memory_log = time.ticks_ms()
@@ -284,11 +284,11 @@ class NetworkManager:
             return True
 
         except asyncio.CancelledError:
-            self._log_manager.warning("[WARNING] MJPEG upload cancelled before recording")
+            self._log_manager.warning("MJPEG upload cancelled before recording")
             raise
         except Exception as error:
             print("MJPEG upload error:", error)
-            self._log_manager.info("[DEBUG] MJPEG upload error")
+            self._log_manager.info("MJPEG upload error")
             return False
 
         finally:
@@ -296,9 +296,9 @@ class NetworkManager:
                 try:
                     writer.close()
                     await writer.wait_closed()
-                    self._log_manager.info("[DEBUG] S3 TLS connection closed")
+                    self._log_manager.info("S3 TLS connection closed")
                 except Exception as error:
-                    self._log_manager.info("[DEBUG] Writer close error")
+                    self._log_manager.info("Writer close error")
                     print("Writer close error:", error)
 
     async def _send_upload_header(self, writer, host, path, file_size):
@@ -323,12 +323,12 @@ class NetworkManager:
         # HTTP/1.1 200 OK
         status_line = await reader.readline()
 
-        self._log_manager.info("[DEBUG] S3 response received")
+        self._log_manager.info("S3 response received")
 
         # A missing response usually means that the connection was
         # closed before S3 returned an HTTP status.
         if not status_line:
-            self._log_manager.info("[DEBUG] No response received from S3")
+            self._log_manager.info("No response received from S3")
             raise OSError("No response received from S3")
 
         print("S3 response:", status_line)
@@ -339,7 +339,7 @@ class NetworkManager:
             response_body = await reader.read()
             print("S3 error response:", response_body)
 
-            self._log_manager.info("[DEBUG] MJPEG upload failed")
+            self._log_manager.info("MJPEG upload failed")
 
             raise OSError("MJPEG upload failed")
 
@@ -354,11 +354,11 @@ class NetworkManager:
         writer = None
 
         try:
-            self._log_manager.info("[DEBUG] Opening presigned URL TLS connection")
+            self._log_manager.info("Opening presigned URL TLS connection")
             reader, writer = await asyncio.open_connection(
                 host, self._upload_config.https_port(), ssl=True
             )
-            self._log_manager.info("[DEBUG] Presigned URL TLS connected")
+            self._log_manager.info("Presigned URL TLS connected")
 
             # Build the HTTP POST request header.
             request = (
@@ -379,11 +379,11 @@ class NetworkManager:
             status_line = await reader.readline()
 
             if not status_line:
-                self._log_manager.info("[DEBUG] No response received")
+                self._log_manager.info("No response received")
                 raise OSError("No response received")
 
             if b" 200 " not in status_line:
-                self._log_manager.info("[DEBUG] HTTP POST failed")
+                self._log_manager.info("HTTP POST failed")
                 raise OSError(
                     "HTTP POST failed: {}".format(status_line)
                 )
@@ -400,7 +400,7 @@ class NetworkManager:
             return json.loads(response_body)
 
         except Exception as error:
-            self._log_manager.info("[DEBUG] POST error")
+            self._log_manager.info("POST error")
             print("POST error:", error)
             raise
 
@@ -409,7 +409,7 @@ class NetworkManager:
                 try:
                     writer.close()
                     await writer.wait_closed()
-                    self._log_manager.info("[DEBUG] Presigned URL TLS connection closed")
+                    self._log_manager.info("Presigned URL TLS connection closed")
                 except Exception as error:
                     print("Writer close error:", error)
                     raise
@@ -436,7 +436,7 @@ class NetworkManager:
 
     async def abort_upload(self):
         if self._upload_task:
-            self._log_manager.warning("[WARNING] Stopping current upload before recording")
+            self._log_manager.warning("Stopping current upload before recording")
             self._upload_task.cancel()
             try:
                 # Wait until the upload has closed its file and TLS connection.
@@ -445,6 +445,6 @@ class NetworkManager:
                 pass
             finally:
                 self._upload_task = None
-            self._log_manager.info("[INFO] Current upload stopped before recording")
+            self._log_manager.info("Current upload stopped before recording")
             return True
         return False

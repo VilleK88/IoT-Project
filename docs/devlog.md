@@ -1112,3 +1112,12 @@ a 2-second post-FFC recovery proved insufficient, so the recovery period was inc
 - Started the test on 7 September 2026 at 15:59:56 and ran continuously for 13 hours 27 minutes without crashes.
 - Subsequent crashes occurred when signing in to Windows or moving the hotspot phone to another room.
 - The system resumed autonomous operation after rebooting and was still running on 8 September 2026 at 08:10.
+
+## 2026-09-08
+# Consistent Log Message Formatting
+
+- Removed manually added severity prefixes from log messages.
+- Kept the existing info(), warning(), and error() methods.
+- Ensured LogManager adds the timestamp and severity label exactly once.
+- Checked all 15 updated Python files for leftover severity prefixes.
+- Preserved existing logging frequency and application behaviour.
