@@ -153,17 +153,5 @@ class CameraPag(Camera):
     def stop_recording_mode(self):
         self.csi0.framesize(csi.VGA)
 
-    """def buffer(self):
-        return self._buffer
-
-    def buffer_index(self):
-        return self._buffer_index
-
-    def last_frame_time(self):
-        return self._last_frame_time"""
-
     def frame_interval_ms(self):
         return self._frame_interval_ms
-
-    """def ring_buffer_fill_count(self):
-        return self._ring_buf_fil_count"""

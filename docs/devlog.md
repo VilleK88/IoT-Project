@@ -1121,3 +1121,13 @@ a 2-second post-FFC recovery proved insufficient, so the recovery period was inc
 - Ensured LogManager adds the timestamp and severity label exactly once.
 - Checked all 15 updated Python files for leftover severity prefixes.
 - Preserved existing logging frequency and application behaviour.
+
+## 2026-09-10
+# Network Timeout and Documentation Updates
+
+- Added a shared configurable timeout for network operations.
+- Applied the timeout to the presigned URL request, upload streaming, and S3 response handling.
+- Removed redundant operation-specific timeout settings.
+- Standardized thermal motion checking to a 1,000 ms interval during monitoring and recording.
+- Updated the project report to match the current implementation.
+

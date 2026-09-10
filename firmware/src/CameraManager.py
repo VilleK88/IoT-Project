@@ -71,7 +71,7 @@ class CameraManager:
                     else:
                         print("Video storage quota reached")
                         self._log_manager.warning("Video storage quota reached")
-            await asyncio.sleep_ms(self._mot_conf.chk_mot_ms_idle())
+            await asyncio.sleep_ms(self._mot_conf.chk_mot_ms())
 
     def _record_state_machine(self):
         try:
@@ -137,7 +137,7 @@ class CameraManager:
                 self._camera_pag.live_frames_pag += 1
 
                 # Check for movement at the configured interval.
-                if time.ticks_diff(now, last_motion_check) >= self._mot_conf.chk_mot_ms_recording():
+                if time.ticks_diff(now, last_motion_check) >= self._mot_conf.chk_mot_ms():
                     last_motion_check = now
                     # Ignore thermal motion detection during or immediately after FFC.
                     if not self._camera_lepton.handle_ffc():

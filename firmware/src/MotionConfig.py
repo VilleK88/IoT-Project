@@ -1,7 +1,6 @@
 class MotionConfig:
     def __init__(self):
-        self._chk_mot_ms_idle = 1000 # 1 times per second
-        self._chk_mot_ms_recording = 500  # Check motion 2 times per second
+        self._chk_mot_ms = 1000 # 1 times per second
         self._init_file_num = -1  # Initial file counter value
         self._motion_timeout_ms = 5000  # 5 seconds
 
@@ -16,11 +15,8 @@ class MotionConfig:
         self._hist_low_percentile = 0.90
         self._hist_high_percentile = 0.99
 
-    def chk_mot_ms_idle(self):
-        return self._chk_mot_ms_idle
-
-    def chk_mot_ms_recording(self):
-        return self._chk_mot_ms_recording
+    def chk_mot_ms(self):
+        return self._chk_mot_ms
 
     def init_file_num(self):
         return self._init_file_num

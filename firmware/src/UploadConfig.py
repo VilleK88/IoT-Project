@@ -19,9 +19,8 @@ class UploadConfig:
         self._connect_max_attempts = 10
 
         self._upload_progress_timeout_ms = 10000
-        self._stream_timeout_s = 10
-        self._response_timeout_s = 10
         self._memory_log_interval_ms = 10_000
+        self._network_operation_timeout_s = 10
 
     def upload_time_ms(self):
         return self._upload_time_ms
@@ -59,11 +58,8 @@ class UploadConfig:
     def upload_progress_timeout_ms(self):
         return self._upload_progress_timeout_ms
 
-    def stream_timeout_s(self):
-        return self._stream_timeout_s
-
-    def response_timeout_s(self):
-        return self._response_timeout_s
-
     def memory_log_interval_ms(self):
         return self._memory_log_interval_ms
+
+    def network_operation_timeout_s(self):
+        return self._network_operation_timeout_s

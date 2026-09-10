@@ -10,10 +10,7 @@ class TimeManager:
         else:
             offset_seconds = 2 * 60 * 60
 
-        local_time = time.gmtime(
-            time.time() + offset_seconds
-        )
-
+        local_time = time.gmtime(time.time() + offset_seconds)
         rtc = RTC()
 
         rtc.datetime((
@@ -47,27 +44,9 @@ class TimeManager:
         year = utc_time[0]
         march_sunday = self._last_sunday(year, 3)
         october_sunday = self._last_sunday(year, 10)
-        current = (
-            utc_time[1],
-            utc_time[2],
-            utc_time[3],
-            utc_time[4],
-            utc_time[5]
-        )
-        summer_start = (
-            3,
-            march_sunday,
-            1,
-            0,
-            0
-        )
-        summer_end = (
-            10,
-            october_sunday,
-            1,
-            0,
-            0
-        )
+        current = (utc_time[1], utc_time[2], utc_time[3], utc_time[4], utc_time[5])
+        summer_start = (3, march_sunday, 1, 0, 0)
+        summer_end = (10, october_sunday, 1, 0, 0)
         return summer_start <= current < summer_end
 
     def timestamp(self):

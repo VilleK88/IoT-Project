@@ -210,7 +210,7 @@ class NetworkManager:
 
             # Stream the file directly from storage to S3 in blocks
             # instead of loading the complete MJPEG file into RAM.
-            with (open(filename, "rb") as file):
+            with open(filename, "rb") as file:
                 try:
                     while True:
                         if self._wlan.isconnected():
@@ -239,7 +239,7 @@ class NetworkManager:
                                 return False
 
                             try:
-                                await asyncio.wait_for(writer.drain(), self._upload_config.stream_timeout_s())
+                                await asyncio.wait_for(writer.drain(), self._upload_config.network_operation_timeout_s())
                             except asyncio.TimeoutError:
                                 self._log_manager.warning("Upload stream timeout")
                                 print("Upload stream timeout")
@@ -271,7 +271,7 @@ class NetworkManager:
             self._log_manager.info("Upload memory after streaming: {}".format(gc.mem_free()))
 
             try:
-                await asyncio.wait_for(self._check_upload_response(reader), self._upload_config.response_timeout_s())
+                await asyncio.wait_for(self._check_upload_response(reader), self._upload_config.network_operation_timeout_s())
             except asyncio.TimeoutError:
                 self._log_manager.warning("Upload response failed")
                 return False
@@ -322,34 +322,28 @@ class NetworkManager:
         # Read the first line of the HTTP response, for example:
         # HTTP/1.1 200 OK
         status_line = await reader.readline()
-
         self._log_manager.info("S3 response received")
 
-        # A missing response usually means that the connection was
-        # closed before S3 returned an HTTP status.
-        if not status_line:
+        if status_line:
+            print("S3 response:", status_line)
+            # A successful S3 PUT upload returns HTTP status 200.
+            # Read and print the remaining response only when the upload fails.
+            if b" 200 " not in status_line:
+                response_body = await reader.read()
+                print("S3 error response:", response_body)
+                self._log_manager.info("MJPEG upload failed")
+                raise OSError("MJPEG upload failed")
+        else:
+            # A missing response usually means that the connection was
+            # closed before S3 returned an HTTP status.
             self._log_manager.info("No response received from S3")
             raise OSError("No response received from S3")
-
-        print("S3 response:", status_line)
-
-        # A successful S3 PUT upload returns HTTP status 200.
-        # Read and print the remaining response only when the upload fails.
-        if b" 200 " not in status_line:
-            response_body = await reader.read()
-            print("S3 error response:", response_body)
-
-            self._log_manager.info("MJPEG upload failed")
-
-            raise OSError("MJPEG upload failed")
 
     # Sends a JSON POST request over HTTPS and returns the JSON response.
     async def _post_json(self, url, data):
         host, path = self._parse_https_url(url)
-
         # Convert the Python object into a JSON request body.
         body = json.dumps(data)
-
         reader = None
         writer = None
 
@@ -377,27 +371,22 @@ class NetworkManager:
 
             # Read the HTTP status line.
             status_line = await reader.readline()
-
-            if not status_line:
+            if status_line:
+                if b" 200 " in status_line:
+                    # Skip HTTP response headers.
+                    while True:
+                        line = await reader.readline()
+                        if line == b"\r\n":
+                            break
+                    # Read and decode the JSON response body.
+                    response_body = await reader.read()
+                    return json.loads(response_body)
+                else:
+                    self._log_manager.info("HTTP POST failed")
+                    raise OSError("HTTP POST failed: {}".format(status_line))
+            else:
                 self._log_manager.info("No response received")
                 raise OSError("No response received")
-
-            if b" 200 " not in status_line:
-                self._log_manager.info("HTTP POST failed")
-                raise OSError(
-                    "HTTP POST failed: {}".format(status_line)
-                )
-
-            # Skip HTTP response headers.
-            while True:
-                line = await reader.readline()
-
-                if line == b"\r\n":
-                    break
-
-            # Read and decode the JSON response body.
-            response_body = await reader.read()
-            return json.loads(response_body)
 
         except Exception as error:
             self._log_manager.info("POST error")
@@ -416,7 +405,14 @@ class NetworkManager:
 
     # Requests a temporary S3 upload URL from AWS.
     async def _get_upload_url(self, data):
-        response = await self._post_json(self._network_config.url_endpoint(), data)
+        try:
+            response = await asyncio.wait_for(
+                self._post_json(self._network_config.url_endpoint(), data),
+                self._upload_config.network_operation_timeout_s()
+            )
+        except asyncio.TimeoutError:
+            self._log_manager.warning("Presigned URL request timed out")
+            raise
         return response["upload_url"]
 
     # Parses a presigned HTTPS URL without modifying its signed path or query.
