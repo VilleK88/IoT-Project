@@ -11,7 +11,7 @@ import gc
 
 async def main():
     # Garbage-collection threshold for the full system.
-    gc.threshold(5_000_000) # 5_000_000
+    gc.threshold(5_000_000)
 
     file_manager = FileManager()
     log_manager = LogManager(file_manager)
