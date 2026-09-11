@@ -70,12 +70,15 @@ def detect_labels(frame):
     return response["Labels"]
 
 def get_target_labels(labels):
-    """Return configured target labels found in a frame."""
+    """Return configured target labels and confidence values."""
     targets = []
     for label in labels:
         label_name = label["Name"]
         if label_name in TARGET_SPECIES:
-            targets.append(label_name)
+            targets.append({
+                "name": label_name,
+                "confidence": label["Confidence"],
+            })
     return targets
 
 def extract_jpeg_frames(mjpeg_data):

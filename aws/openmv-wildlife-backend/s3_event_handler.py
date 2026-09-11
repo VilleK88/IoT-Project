@@ -62,17 +62,23 @@ def process_pag_event(camera_id, event_id, pag_key):
             frame = target_frame["frame"]
             targets = target_frame["targets"]
 
-            for target in targets:
-                object_key = save_target_frame(
-                    S3_BUCKET_NAME,
-                    target,
-                    camera_id,
-                    event_id,
-                    frame_number,
-                    frame
-                )
+            best_target = max(targets, key=lambda target: target["confidence"])
 
-                print(f"Saved target frame: {object_key}")
+            object_key = save_target_frame(
+                S3_BUCKET_NAME,
+                best_target["name"],
+                camera_id,
+                event_id,
+                frame_number,
+                frame
+            )
+            print(
+                "Saved target frame: {} "
+                "(target: {}, confidence: {:.2f}%)".format(
+                    object_key,
+                    best_target["name"],
+                    best_target["confidence"]
+                ))
     else:
         print("No targets detected.")
         delete_event(S3_BUCKET_NAME, camera_id, event_id)
