@@ -4,7 +4,6 @@ import time
 import image
 import ustruct
 import asyncio
-import gc
 
 class CameraLepton(Camera):
     def __init__(self, log_manager):
@@ -22,9 +21,6 @@ class CameraLepton(Camera):
         self.csi1.reset(hard=False)  # Soft reset and initialize the sensor
         self.csi1.pixformat(csi.GRAYSCALE)  # Set pixel format to GRAYSCALE
         self.csi1.framesize(csi.QQVGA)  # Native Lepton resolution: 160x120
-
-        #self.csi1.vflip(True)
-        #self.csi1.auto_rotation(True)
 
         # Enable radiometric measurement mode and map the grayscale output
         # to the configured temperature range.
@@ -145,14 +141,18 @@ class CameraLepton(Camera):
 
     async def update_frame_buffer_lepton(self):
         while True:
-            self._current_frame = await self._snapshot_async(self.csi1)
-            self._buffer_index = (
-                self._save_frame(
-                    self._current_frame.copy(),
-                    self._buffer,
-                    self._buffer_index,
+            try:
+                self._current_frame = await self._snapshot_async(self.csi1)
+                self._buffer_index = (
+                    self._save_frame(
+                        self._current_frame.copy(),
+                        self._buffer,
+                        self._buffer_index,
+                    )
                 )
-            )
+            except Exception as error:
+                self._log_manager.error("Lepton frame-buffer error: {}".format(error))
+                print("Lepton frame-buffer error:", error)
             await asyncio.sleep_ms(self._buf_config.frame_interval_ms())
 
     # FFC (Flat-Field Correction) is an internal calibration process performed

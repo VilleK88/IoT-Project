@@ -6,7 +6,6 @@ from src.Tools import Tools
 import network
 import time
 import ntptime
-import requests
 import os
 import asyncio
 import json

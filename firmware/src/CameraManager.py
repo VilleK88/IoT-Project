@@ -55,22 +55,25 @@ class CameraManager:
     # Continuously monitors thermal motion and starts event recording when motion is detected.
     async def monitor_motion_task(self):
         while True:
-            # Do not perform frame differencing during or immediately after FFC.
-            if not self._camera_lepton.handle_ffc():
-                if await self._camera_lepton.detect_motion_async_lepton():
-                    print("camera.record_video()")
-                    if self._file_manager.video_space_available():
-                        try:
-                            await self._network_manager.abort_upload()
-                            self._log_manager.info("Video recording started")
-                            self._record_state_machine()
-                            self._log_manager.info("Video recording completed")
-                        except Exception as err:
-                            self._log_manager.error("Video recording failed: {}".format(err))
-                            raise
-                    else:
-                        print("Video storage quota reached")
-                        self._log_manager.warning("Video storage quota reached")
+            try:
+                # Do not perform frame differencing during or immediately after FFC.
+                if not self._camera_lepton.handle_ffc():
+                    if await self._camera_lepton.detect_motion_async_lepton():
+                        print("camera.record_video()")
+                        if self._file_manager.video_space_available():
+                            try:
+                                await self._network_manager.abort_upload()
+                                self._log_manager.info("Video recording started")
+                                self._record_state_machine()
+                                self._log_manager.info("Video recording completed")
+                            except Exception as err:
+                                self._log_manager.error("Video recording failed: {}".format(err))
+                        else:
+                            print("Video storage quota reached")
+                            self._log_manager.warning("Video storage quota reached")
+            except Exception as error:
+                self._log_manager.error("Motion monitoring task error: {}".format(error))
+                print("Motion monitoring task error:", error)
             await asyncio.sleep_ms(self._mot_conf.chk_mot_ms())
 
     def _record_state_machine(self):

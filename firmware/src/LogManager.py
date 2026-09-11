@@ -1,7 +1,6 @@
 from src.StorageConfig import StorageConfig
 from src.TimeManager import TimeManager
 import os
-import time
 
 class LogManager:
     def __init__(self, file_manager):

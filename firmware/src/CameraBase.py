@@ -25,7 +25,6 @@ class Camera:
         self._buffer_index = 0
         self._last_frame_time = 0
         self._frame_interval_ms = self._buf_config.frame_interval_ms()
-        self._ring_buf_fil_count = 0
 
     async def _snapshot_async(self, camera):
         while True:

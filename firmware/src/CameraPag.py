@@ -3,7 +3,6 @@ import csi
 import image
 import time
 import asyncio
-import gc
 
 class CameraPag(Camera):
     def __init__(self, log_manager):
@@ -23,9 +22,6 @@ class CameraPag(Camera):
         self.csi0.auto_gain(True)
         self.csi0.auto_exposure(True)
         self.csi0.auto_whitebal(True)  # Enable automatic white balance for improved image quality.
-
-        #self.csi0.vflip(True)
-        #self.csi0.auto_rotation(True)
 
         self._current_frame = (
             self.csi0.snapshot(time=self.cam_config.pag_stabilization_ms())
@@ -113,18 +109,20 @@ class CameraPag(Camera):
     # Periodically captures PAG7936 RGB frames into the circular RAM buffer.
     async def update_frame_buffer_pag(self):
         while True:
-            self._current_frame = await self._snapshot_async(self.csi0)
-            # Store a copy of the current frame in the circular buffer.
-            # A copy is required because snapshot() reuses the same image buffer.
-            self._buffer_index = (
-                self._save_frame(
-                    self._current_frame.copy(),
-                    self._buffer,
-                    self._buffer_index,
+            try:
+                self._current_frame = await self._snapshot_async(self.csi0)
+                # Store a copy of the current frame in the circular buffer.
+                # A copy is required because snapshot() reuses the same image buffer.
+                self._buffer_index = (
+                    self._save_frame(
+                        self._current_frame.copy(),
+                        self._buffer,
+                        self._buffer_index,
+                    )
                 )
-            )
-            if self._buffer_index == 0:
-                self._ring_buf_fil_count += 1
+            except Exception as error:
+                self._log_manager.error("PAG frame-buffer error: {}".format(error))
+                print("PAG frame-buffer error:", error)
             # Yield control until the next prebuffer frame is due.
             await asyncio.sleep_ms(self._buf_config.frame_interval_ms())
 

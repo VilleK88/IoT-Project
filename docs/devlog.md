@@ -1131,3 +1131,14 @@ a 2-second post-FFC recovery proved insufficient, so the recovery period was inc
 - Standardized thermal motion checking to a 1,000 ms interval during monitoring and recording.
 - Updated the project report to match the current implementation.
 
+
+## 2026-09-11
+# Camera Task Error Handling and Code Cleanup
+
+- Added exception handling to the motion-monitoring task.
+- Added exception handling to the PAG7936 and Lepton frame-buffer tasks.
+- Prevented ordinary camera exceptions from permanently terminating background tasks.
+- Kept retry delays outside the exception handlers to prevent fast error loops.
+- Removed the unused ring-buffer fill counter.
+- Removed unused `gc`, `time`, and `requests` imports.
+
